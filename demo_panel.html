@@ -1,0 +1,1403 @@
+<!doctype html>
+<html lang="tr">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JEV · Manevra Sahası</title>
+  <link rel="icon" href="data:,">
+  <!--
+  Tasarım notu — Panel "manevra sahası" olarak kuruldu: her form cevabı bir vagon, JEV'in üç kararı vagonun konumunu belirler.
+  choice → hangi ray, score → rayın neresi, noul → lamba. Böylece kartlar tek tek okunmadan toplu dağılım kendiliğinden görünür.
+  Demo verisiyle önizleme: panel adresinin sonuna ?demo ekle.
+-->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=Spline+Sans+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --soot: #0e0e0c;
+      --soot-2: #151412;
+      --soot-3: #1d1c19;
+      --steel: #2c2a26;
+      --rail: #56524a;
+      --rail-hi: #8a8478;
+      --chalk: #ebe5d5;
+      --dim: #9a9486;
+      --faint: #625e55;
+      --amber: #ffb000;
+      --go: #3ccf86;
+      --stop: #ff4b3e;
+      --f-display: "Big Shoulders Display", "Haettenschweiler", "Impact", sans-serif;
+      --f-mono: "Spline Sans Mono", "SF Mono", "Menlo", "Consolas", monospace;
+      --ease: cubic-bezier(.2, .7, .1, 1);
+      --lw: 176px;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    html,
+    body {
+      margin: 0;
+      background: var(--soot);
+      color: var(--chalk)
+    }
+
+    body {
+      font-family: var(--f-mono);
+      font-size: 14px;
+      line-height: 1.55;
+      min-height: 100vh;
+      background:
+        radial-gradient(1000px 520px at 100% -10%, rgba(255, 176, 0, .10), transparent 62%),
+        radial-gradient(800px 500px at -10% 110%, rgba(255, 176, 0, .04), transparent 60%),
+        var(--soot);
+      background-attachment: fixed;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 100;
+      opacity: .07;
+      mix-blend-mode: overlay;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    }
+
+    button {
+      font: inherit;
+      color: inherit
+    }
+
+    code {
+      color: var(--amber);
+      font-size: .92em
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--amber);
+      outline-offset: 3px
+    }
+
+    ::selection {
+      background: var(--amber);
+      color: var(--soot)
+    }
+
+    /* ---------- Üst şerit ---------- */
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+      padding: 22px 28px 14px
+    }
+
+    .brand {
+      margin: 0;
+      font: 800 13px/1 var(--f-display);
+      letter-spacing: .22em;
+      text-transform: uppercase;
+      color: var(--dim)
+    }
+
+    .brand span {
+      display: inline-block;
+      padding: 4px 8px 3px;
+      border: 2px solid var(--amber);
+      color: var(--amber);
+      margin-right: 10px
+    }
+
+    h1 {
+      margin: .3em 0 0;
+      font: 900 clamp(40px, 4.6vw, 68px)/.92 var(--f-display);
+      text-transform: uppercase
+    }
+
+    h1 em {
+      font-style: normal;
+      color: var(--amber)
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: flex-end
+    }
+
+    .btn {
+      font: 800 15px/1 var(--f-display);
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      cursor: pointer;
+      color: var(--soot);
+      background: var(--amber);
+      border: 0;
+      padding: 16px 24px 16px 22px;
+      clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
+      padding-right: 32px;
+    }
+
+    .btn:hover {
+      filter: brightness(1.08)
+    }
+
+    .btn:disabled {
+      cursor: wait;
+      filter: grayscale(.5) brightness(.8)
+    }
+
+    .tgl {
+      font: 800 12px/1 var(--f-display);
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      cursor: pointer;
+      background: none;
+      border: 1px solid var(--rail);
+      color: var(--dim);
+      padding: 11px 12px;
+    }
+
+    .tgl[aria-pressed=true] {
+      background: var(--chalk);
+      color: var(--soot);
+      border-color: var(--chalk)
+    }
+
+    .tgl.live[aria-pressed=true] {
+      background: var(--go);
+      border-color: var(--go)
+    }
+
+    #status {
+      margin: 0;
+      min-width: 16ch;
+      text-align: right;
+      font-size: 12px;
+      color: var(--amber);
+      min-height: 1.4em
+    }
+
+    .banner {
+      display: none;
+      margin: 0 28px 12px;
+      padding: 12px 14px;
+      border: 1px solid var(--stop);
+      color: #ffd0cb;
+      background: rgba(255, 75, 62, .08)
+    }
+
+    .banner.show {
+      display: block
+    }
+
+    /* ---------- Sevk şeridi ---------- */
+    .dispatch {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin: 0 28px;
+      padding: 12px 16px;
+      min-height: 54px;
+      border: 1px solid var(--steel);
+      border-left: 0;
+      position: relative;
+      overflow: hidden;
+      background: repeating-linear-gradient(-45deg, rgba(255, 176, 0, .04) 0 8px, transparent 8px 16px);
+    }
+
+    .dispatch::before {
+      content: "";
+      align-self: stretch;
+      width: 10px;
+      margin: -12px 0 -12px -16px;
+      background: repeating-linear-gradient(-45deg, var(--amber) 0 5px, transparent 5px 10px)
+    }
+
+    .lamp {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #2a2824;
+      border: 2px solid var(--rail);
+      flex: none;
+      transition: .2s
+    }
+
+    .lamp.on {
+      background: var(--amber);
+      border-color: var(--amber);
+      box-shadow: 0 0 16px var(--amber)
+    }
+
+    .dispatch .tag {
+      font: 800 12px/1 var(--f-display);
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--faint);
+      flex: none
+    }
+
+    #dtext {
+      font-size: 14px;
+      color: var(--chalk)
+    }
+
+    #dtext em {
+      font-style: normal;
+      color: var(--amber);
+      font-weight: 700
+    }
+
+    #dtext .mut {
+      color: var(--dim)
+    }
+
+    /* ---------- Sahne: saha + çekmece ---------- */
+    .stage {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 410px;
+      gap: 20px;
+      padding: 16px 28px 10px;
+      align-items: start
+    }
+
+    .yard-wrap {
+      min-width: 0
+    }
+
+    .yard-tools {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: var(--faint)
+    }
+
+    .yard-tools .sp {
+      flex: 1
+    }
+
+    .yard {
+      position: relative;
+      border: 1px solid var(--steel);
+      background: rgba(10, 10, 9, .55)
+    }
+
+    .lane {
+      display: grid;
+      grid-template-columns: var(--lw) 1fr;
+      border-top: 1px solid #1f1d1a;
+      transition: height .5s var(--ease)
+    }
+
+    .lane:first-child {
+      border-top: 0
+    }
+
+    .lane-h {
+      padding: 12px 14px;
+      border-right: 1px solid var(--steel);
+      position: relative;
+      background: linear-gradient(90deg, rgba(255, 255, 255, .02), transparent)
+    }
+
+    .lane-h .nm {
+      font: 900 25px/1 var(--f-display);
+      text-transform: uppercase;
+      letter-spacing: .02em
+    }
+
+    .lane-h .tr {
+      font-size: 11px;
+      color: var(--dim);
+      margin-top: 3px
+    }
+
+    .lane-h .ct {
+      position: absolute;
+      right: 12px;
+      top: 10px;
+      font: 900 30px/1 var(--f-display);
+      color: var(--amber);
+      transition: transform .25s var(--ease)
+    }
+
+    .lane-h .ct.bump {
+      transform: scale(1.35)
+    }
+
+    .lane.wait .lane-h .nm {
+      color: var(--faint);
+      font-size: 19px
+    }
+
+    .lane.wait .lane-h .ct {
+      color: var(--faint)
+    }
+
+    .lane.hot .lane-h {
+      background: linear-gradient(90deg, rgba(255, 176, 0, .10), transparent)
+    }
+
+    .axis {
+      display: grid;
+      grid-template-columns: var(--lw) 1fr;
+      border-top: 1px solid var(--steel);
+      height: 44px;
+      position: relative
+    }
+
+    .axis .ax-h {
+      padding: 10px 14px;
+      font: 800 11px/1.3 var(--f-display);
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--faint);
+      border-right: 1px solid var(--steel)
+    }
+
+    .ax-l {
+      position: absolute;
+      top: 8px;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: var(--dim);
+      text-align: center;
+      white-space: nowrap
+    }
+
+    .ax-l b {
+      display: block;
+      font: 800 13px/1 var(--f-display);
+      letter-spacing: .14em;
+      color: var(--chalk);
+      text-transform: uppercase
+    }
+
+    .rails,
+    .grid {
+      position: absolute;
+      inset: 0;
+      pointer-events: none
+    }
+
+    .rl {
+      position: absolute;
+      height: 8px;
+      border-top: 2px solid #3b3833;
+      border-bottom: 2px solid #3b3833;
+      background: repeating-linear-gradient(90deg, #26231f 0 4px, transparent 4px 14px);
+      opacity: .9
+    }
+
+    .gl {
+      position: absolute;
+      top: 0;
+      width: 0;
+      border-left: 1px dashed #2f2d28
+    }
+
+    /* Vagon */
+    .wagon {
+      position: absolute;
+      width: 60px;
+      height: 34px;
+      z-index: 5;
+      cursor: pointer;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      background: var(--soot-3);
+      border: 2px solid var(--rail-hi);
+      color: var(--chalk);
+      font: 900 18px/1 var(--f-display);
+      letter-spacing: .04em;
+      transition: top .5s var(--ease) calc(var(--dl, 0ms)), left 1.05s var(--ease) calc(var(--dl, 0ms) + .5s), opacity .3s, background .2s, border-color .2s;
+      animation: arrive .5s var(--ease) backwards;
+    }
+
+    .wagon.nomove {
+      transition: opacity .3s, background .2s, border-color .2s
+    }
+
+    @keyframes arrive {
+      from {
+        opacity: 0;
+        transform: translateY(-10px) scale(.8)
+      }
+
+      to {
+        opacity: 1;
+        transform: none
+      }
+    }
+
+    .wagon::before,
+    .wagon::after {
+      content: "";
+      position: absolute;
+      bottom: -6px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--soot);
+      border: 2px solid var(--rail-hi)
+    }
+
+    .wagon::before {
+      left: 8px
+    }
+
+    .wagon::after {
+      right: 8px
+    }
+
+    .wagon i {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #37342e;
+      flex: none;
+      transition: .3s
+    }
+
+    .wagon.pending {
+      border-style: dashed;
+      border-color: var(--faint);
+      color: var(--dim)
+    }
+
+    .wagon.pending i {
+      background: var(--faint);
+      animation: pulse 1s steps(2) infinite
+    }
+
+    @keyframes pulse {
+      50% {
+        opacity: .2
+      }
+    }
+
+    .wagon.yes {
+      border-color: var(--amber)
+    }
+
+    .wagon.yes i {
+      background: var(--amber);
+      box-shadow: 0 0 10px var(--amber)
+    }
+
+    .wagon.unc {
+      border-style: dashed
+    }
+
+    .wagon.unc::after {}
+
+    .wagon.err {
+      border-color: var(--stop);
+      color: var(--stop)
+    }
+
+    .wagon.err i {
+      background: var(--stop)
+    }
+
+    .wagon:hover {
+      background: #2a2823
+    }
+
+    .wagon.sel {
+      background: var(--amber);
+      border-color: var(--amber);
+      color: var(--soot);
+      box-shadow: 0 0 0 4px rgba(255, 176, 0, .18), 0 0 22px rgba(255, 176, 0, .5);
+      z-index: 8
+    }
+
+    .wagon.sel i {
+      background: var(--soot);
+      box-shadow: none
+    }
+
+    .wagon.dim {
+      opacity: .14;
+      filter: grayscale(1)
+    }
+
+    .wagon.hit:not(.sel) {
+      box-shadow: 0 0 0 3px rgba(255, 176, 0, .35)
+    }
+
+    .conf {
+      display: grid;
+      grid-template-columns: 96px 1fr 52px;
+      gap: 8px;
+      align-items: center;
+      margin-top: 10px;
+      padding: 7px 8px;
+      border: 1px solid var(--steel);
+      font-size: 11px;
+      color: var(--dim)
+    }
+
+    .conf strong {
+      font: 900 20px/1 var(--f-display);
+      color: var(--go);
+      text-align: right
+    }
+
+    .conf .tk {
+      height: 10px
+    }
+
+    .conf .tk i {
+      background: var(--go)
+    }
+
+    .conf.low strong {
+      color: var(--amber)
+    }
+
+    .conf.low .tk i {
+      background: var(--amber)
+    }
+
+    #fcount {
+      color: var(--amber)
+    }
+
+    .cost {
+      position: relative;
+      cursor: help;
+      perspective: 600px;
+      outline-offset: 6px
+    }
+
+    .cost .face {
+      transition: transform .55s var(--ease), opacity .3s;
+      backface-visibility: hidden
+    }
+
+    .cost .face.tl {
+      position: absolute;
+      inset: 0;
+      transform: rotateX(180deg);
+      opacity: 0
+    }
+
+    .cost:hover .face.usd,
+    .cost:focus .face.usd {
+      transform: rotateX(-180deg);
+      opacity: 0
+    }
+
+    .cost:hover .face.tl,
+    .cost:focus .face.tl {
+      transform: none;
+      opacity: 1
+    }
+
+    .cost b {
+      color: var(--go)
+    }
+
+    .cost .face.tl b {
+      color: var(--amber)
+    }
+
+    /* Çekmece */
+    .drawer {
+      position: sticky;
+      top: 14px;
+      border: 2px solid var(--chalk);
+      background: var(--soot-2);
+      padding: 16px 18px 14px;
+      max-height: calc(100vh - 28px);
+      overflow: auto
+    }
+
+    .drawer::before {
+      content: "";
+      position: absolute;
+      inset: 5px;
+      border: 1px solid #3a3832;
+      pointer-events: none
+    }
+
+    .drawer h2 {
+      margin: 0;
+      font: 900 30px/1 var(--f-display);
+      text-transform: uppercase
+    }
+
+    .drawer h3 {
+      margin: 16px 0 6px;
+      font: 800 11px/1 var(--f-display);
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--faint)
+    }
+
+    .dh {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px
+    }
+
+    .dh span {
+      color: var(--faint);
+      font-size: 11px
+    }
+
+    .fld {
+      margin-top: 10px
+    }
+
+    .fld p {
+      margin: 2px 0 0;
+      white-space: pre-wrap
+    }
+
+    .muted {
+      color: var(--faint)
+    }
+
+    .pips {
+      display: inline-flex;
+      gap: 5px;
+      align-items: center;
+      vertical-align: middle
+    }
+
+    .pip {
+      width: 16px;
+      height: 7px;
+      background: #2a2824
+    }
+
+    .pip.on {
+      background: var(--amber)
+    }
+
+    details.st summary {
+      cursor: pointer;
+      color: var(--dim);
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-top: 12px
+    }
+
+    details.st pre {
+      margin: 8px 0 0;
+      padding: 10px;
+      background: #0a0a09;
+      border: 1px solid #2a2824;
+      font: 400 11px/1.5 var(--f-mono);
+      color: #cfc6b4;
+      white-space: pre-wrap;
+      overflow: auto
+    }
+
+    .dec {
+      padding-top: 10px;
+      margin-top: 10px;
+      border-top: 1px solid var(--steel)
+    }
+
+    .dec .hd {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: baseline
+    }
+
+    .dec .ty {
+      font: 800 11px/1 var(--f-display);
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--dim)
+    }
+
+    .dec .big {
+      margin: 4px 0 0;
+      font: 900 34px/.95 var(--f-display);
+      text-transform: uppercase
+    }
+
+    .dec .big small {
+      font: 500 13px var(--f-mono);
+      color: var(--dim);
+      text-transform: none
+    }
+
+    .sub {
+      color: var(--dim);
+      font-size: 12px
+    }
+
+    .yn {
+      font: 800 12px/1 var(--f-display);
+      letter-spacing: .14em;
+      color: var(--go)
+    }
+
+    .yn.no {
+      color: var(--dim)
+    }
+
+    .bars {
+      display: grid;
+      gap: 4px;
+      margin-top: 8px
+    }
+
+    .br {
+      display: grid;
+      grid-template-columns: 88px 1fr 36px;
+      gap: 8px;
+      align-items: center;
+      font-size: 11px;
+      color: var(--dim)
+    }
+
+    .br strong {
+      color: var(--chalk);
+      font-weight: 700;
+      text-align: right
+    }
+
+    .tk {
+      height: 8px;
+      background: #2a2824;
+      position: relative
+    }
+
+    .tk i {
+      position: absolute;
+      inset: 0 auto 0 0;
+      background: var(--rail-hi);
+      width: 0;
+      transition: width .9s var(--ease)
+    }
+
+    .br.on {
+      color: var(--chalk)
+    }
+
+    .br.on .tk i {
+      background: var(--amber)
+    }
+
+    .thr {
+      position: absolute;
+      top: -4px;
+      bottom: -4px;
+      width: 2px;
+      background: var(--stop)
+    }
+
+    .warn {
+      margin: 8px 0 0;
+      color: var(--amber);
+      font-size: 11px
+    }
+
+    .codeb {
+      margin: 8px 0 0;
+      padding: 10px 12px;
+      background: #0b0b0a;
+      border-left: 3px solid var(--amber);
+      font: 400 11.5px/1.75 var(--f-mono);
+      color: var(--chalk);
+      white-space: pre-wrap
+    }
+
+    .codeb .k {
+      color: var(--dim)
+    }
+
+    .codeb .v {
+      color: var(--go)
+    }
+
+    .codeb .a {
+      color: var(--amber)
+    }
+
+    .fn {
+      margin: 10px 0 0;
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--faint)
+    }
+
+    .err-t {
+      color: #ffb4ae;
+      margin-top: 12px
+    }
+
+    .wait-t {
+      margin-top: 14px;
+      color: var(--amber);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      font-size: 12px
+    }
+
+    .how {
+      margin: 14px 0 0;
+      padding: 0;
+      list-style: none
+    }
+
+    .how li {
+      display: grid;
+      grid-template-columns: 70px 1fr;
+      gap: 10px;
+      padding: 10px 0;
+      border-top: 1px dashed #2f2d28;
+      font-size: 12.5px
+    }
+
+    .how b {
+      font: 900 18px/1 var(--f-display);
+      color: var(--amber);
+      letter-spacing: .04em
+    }
+
+    .how .sw {
+      display: inline-block;
+      vertical-align: middle;
+      width: 22px;
+      height: 12px;
+      border: 2px solid var(--amber);
+      margin-right: 6px
+    }
+
+    .kbd {
+      font-size: 11px;
+      color: var(--faint);
+      margin-top: 14px
+    }
+
+    .kbd kbd {
+      font: inherit;
+      color: var(--chalk);
+      border: 1px solid var(--rail);
+      padding: 1px 6px
+    }
+
+    /* ---------- Toplu şerit ---------- */
+    .sum {
+      display: grid;
+      grid-template-columns: repeat(7, auto);
+      justify-content: start;
+      gap: 0 34px;
+      margin: 6px 28px 0;
+      padding: 14px 0;
+      border-top: 1px solid var(--steel)
+    }
+
+    .sum div b {
+      display: block;
+      font: 900 30px/1 var(--f-display);
+      color: var(--amber);
+      text-transform: uppercase;
+      overflow-wrap: anywhere
+    }
+
+    .sum div b.s {
+      font-size: 20px
+    }
+
+    .sum div span {
+      display: block;
+      margin-top: 6px;
+      font-size: 10.5px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--dim)
+    }
+
+    .fine {
+      margin: 0;
+      padding: 6px 28px 26px;
+      font-size: 11px;
+      color: var(--faint);
+      max-width: 120ch
+    }
+
+    @media (max-width:1100px) {
+      .stage {
+        grid-template-columns: 1fr
+      }
+
+      .drawer {
+        position: relative;
+        top: 0;
+        max-height: none
+      }
+
+      .sum {
+        grid-template-columns: repeat(3, auto)
+      }
+
+      :root {
+        --lw: 120px
+      }
+
+      .lane-h .nm {
+        font-size: 19px
+      }
+    }
+
+    @media (prefers-reduced-motion:reduce) {
+
+      *,
+      *::before,
+      *::after {
+        animation: none !important;
+        transition: none !important
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="top">
+    <div>
+      <p class="brand"><span>JEV</span> Canlı demo · manevra sahası</p>
+      <h1>Her cevap bir <em>vagon.</em></h1>
+    </div>
+    <div class="actions">
+      <p id="status" role="status"></p>
+      <button class="tgl live" id="live" type="button" aria-pressed="false"
+        title="Her 7 saniyede yeni cevap ara (L)">Canlı: kapalı</button>
+      <button class="btn" id="cek" type="button">Cevapları çek</button>
+    </div>
+  </header>
+  <p class="banner" id="banner" role="alert"></p>
+
+  <div class="dispatch" aria-live="polite">
+    <i class="lamp" id="dlamp"></i><span class="tag">Son sevk</span>
+    <span id="dtext"><span class="mut">Henüz vagon yok. Form dolunca cevapları çek; JEV her vagonu bir raya
+        yönlendirecek.</span></span>
+  </div>
+
+  <div class="stage">
+    <section class="yard-wrap" aria-label="Manevra sahası">
+      <div class="yard-tools">
+        <button class="tgl" id="fv" type="button" aria-pressed="false"
+          title="noul olasılığı eşiğin üstünde olan (lambası yanan) vagonları öne çıkarır, diğerlerini soluklaştırır">Doğrulama
+          lambası yananları öne çıkar</button>
+        <button class="tgl" id="fu" type="button" aria-pressed="false"
+          title="choice veya score confidence değeri %60 altında olan (kesikli çerçeveli) vagonları öne çıkarır">Belirsiz
+          eşleşmeleri öne çıkar</button>
+        <span id="fcount" aria-live="polite"></span>
+        <span class="sp"></span>
+        <span>Vagona tıkla ya da ← → ile gez</span>
+      </div>
+      <div class="yard" id="yard">
+        <div class="lanes" id="lanes"></div>
+        <div class="axis" id="axis">
+          <div class="ax-h">Açıklık skoru<br>score · rayda konum</div>
+        </div>
+        <div class="rails" id="rails"></div>
+        <div class="grid" id="gridl"></div>
+      </div>
+    </section>
+
+    <aside class="drawer" id="drawer" aria-label="Seçili vagon" aria-live="polite"></aside>
+  </div>
+
+  <section class="sum" id="sum" aria-label="Toplu özet"></section>
+  <p class="fine">Etiketler kişi hakkında hüküm değildir; yalnızca bu form cevaplarının JEV tarafından önceden
+    tanımlanmış kategorilere eşleştirilmesidir. Olasılık ve confidence değerleri otomasyon sinyalidir, doğruluk
+    garantisi değildir. Toplu sayılar JEV'e tekrar sorulmadan, kart sonuçlarından hesaplanır.</p>
+
+  <script>
+    (() => {
+      "use strict";
+      const $ = id => document.getElementById(id);
+      const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const DEMO = new URLSearchParams(location.search).has("demo");
+      const WW = 60, WH = 34, SUB = 54, NOUL_YES = 0.70, TL_RATE = 50;
+
+      const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      const pct = v => `${Math.round(Number(v) * 100)}%`;
+      const money = v => Number.isFinite(Number(v)) ? `$${Number(v).toFixed(7)}` : "—";
+      const moneyTL = v => Number.isFinite(Number(v)) ? `₺${(Number(v) * TL_RATE).toFixed(6)}` : "—";
+      const pad2 = n => String(n).padStart(2, "0");
+      const sleep = ms => new Promise(r => setTimeout(r, reduce ? 0 : ms));
+
+      const LANES = [
+        { key: "_wait", name: "Giriş", tr: "JEV karar veriyor", wait: true },
+        { key: "explorer", name: "explorer", tr: "Denemeye açık" },
+        { key: "pragmatist", name: "pragmatist", tr: "Faydacı" },
+        { key: "cautious", name: "cautious", tr: "Dikkatli" },
+        { key: "skeptic", name: "skeptic", tr: "Mesafeli" },
+        { key: "other", name: "other", tr: "Kaçış rayı · diğer" }
+      ];
+
+      /* ---------- Demo verisi (?demo): backend olmadan önizleme / yedek ---------- */
+      function demoRows() {
+        const spec = [
+          ["Ders konularını anlamak", 4, "Konuyu basitçe anlatmalı ve farklı örnekler vermeli.", "Yanlış bilgi vermesi ve benim bunu fark edememem.", "cautious", .91, 1.42, .84, .96],
+          ["Kodlama ve teknik işler", 5, "Hata ayıklamada daha tutarlı olmalı.", "Kendi öğrenme hızımı yavaşlatması.", "explorer", .88, 1.86, .9, .31],
+          ["Yazı veya sunum hazırlamak", 3, "Kaynak göstermeli, uydurmamalı.", "Kaynağı olmayan bilgi.", "cautious", .74, 1.1, .8, .93],
+          ["Araştırma ve kaynak bulmak", 4, "Güncel ve doğrulanabilir bilgi vermeli.", "Güncel olmayan bilgi.", "pragmatist", .52, 1.55, .7, .88],
+          ["Kullanmayı tercih etmem", 1, "Bence hiçbir şey yapmasın.", "Düşünmeyi bırakmak.", "skeptic", .93, .12, .95, .41],
+          ["Ders konularını anlamak", 5, "Her konuyu örneklerle anlatsın.", "Belirgin bir endişem yok.", "explorer", .81, 1.92, .93, .06],
+          ["Yazı veya sunum hazırlamak", 3, "Yazım stilimi bozmadan yardım etmeli.", "Hocaların fark etmesi.", "pragmatist", .77, 1.2, .82, .27],
+          ["Kodlama ve teknik işler", 4, "Daha az halüsinasyon.", "Güvenlik açıklı kod önermesi.", "pragmatist", .69, 1.47, .85, .82],
+          ["Araştırma ve kaynak bulmak", 2, "Bilmiyorsa bilmediğini söylesin.", "Yanlışı çok emin söylemesi.", "cautious", .85, .78, .9, .97],
+          ["Ders konularını anlamak", 3, "-", "Bilmiyorum.", "other", .58, .95, .6, .12]
+        ];
+        return spec.map((s, i) => {
+          const [area, trust, benefit, concern, choice, conf, score, sconf, noul] = s;
+          const keys = ["explorer", "pragmatist", "cautious", "skeptic", "other"];
+          const labels = { explorer: "Denemeye açık", pragmatist: "Faydacı", cautious: "Dikkatli", skeptic: "Mesafeli", other: "Diğer" };
+          const rest = keys.filter(k => k !== choice), share = (1 - conf) / rest.length;
+          const options = keys.map(k => ({ key: k, label: labels[k], p: k === choice ? conf : share, selected: k === choice })).sort((a, b) => b.p - a.p);
+          let p = [Math.max(0, 1 - score), Math.max(0, 1 - Math.abs(score - 1)), Math.max(0, score - 1)];
+          const sum = p.reduce((a, b) => a + b, 0) || 1; p = p.map(x => x / sum);
+          const names = ["Düşük", "Orta", "Yüksek"], nearest = Math.min(2, Math.max(0, Math.round(score)));
+          const levels = names.map((n, k) => ({ key: String(k), label: n, full: n, p: p[k], selected: k === nearest }));
+          const state = { participant_id: `cevap-${pad2(i + 1)}`, ai_usage_area: area, trust_score: trust, benefit_answer: benefit, concern_answer: concern };
+          return {
+            id: "demo" + i, number: i + 1, timestamp: `14.10.2026 ${18 + Math.floor(i / 6)}:${pad2(10 + i * 3)}`,
+            ai_usage_area: area, trust_score: trust, benefit_answer: benefit, concern_answer: concern, state, error: null,
+            jev: {
+              model: "typesafe/jev-1.13",
+              profile: { type: "choice", choice, label: labels[choice], confidence: conf, uncertain: conf < .6, options },
+              adoption: { type: "score", score, max: 2, level: names[nearest], level_full: names[nearest], confidence: sconf, uncertain: sconf < .6, levels },
+              verification: { type: "noul", noul, yes: noul >= NOUL_YES, threshold: NOUL_YES },
+              usage: { input_tokens: 310, output_tokens: 35, cost: 0.00012 }
+            }
+          };
+        });
+      }
+      function demoSummary(rows) {
+        const done = rows.filter(r => r.jev); if (!done.length) return null;
+        const top = arr => { const c = {}; arr.forEach(x => x && (c[x] = (c[x] || 0) + 1)); const m = Math.max(0, ...Object.values(c)); return Object.keys(c).filter(k => c[k] === m); };
+        return {
+          responses: rows.length, decided: done.length, profiles: top(done.map(r => r.jev.profile.label)),
+          average_adoption: done.reduce((a, r) => a + r.jev.adoption.score, 0) / done.length, adoption_max: 2,
+          high_verification: done.filter(r => r.jev.verification.yes).length,
+          uncertain: done.filter(r => r.jev.profile.uncertain || r.jev.adoption.uncertain).length,
+          usage_areas: top(rows.map(r => r.ai_usage_area)), tokens_in: done.length * 310, tokens_out: done.length * 35, cost: done.length * 0.00012
+        };
+      }
+      let demoAll = DEMO ? demoRows() : [], demoShown = 0, demoDone = 0;
+      /* Eşik panelde uygulanır: backend'in verdiği yes/threshold yerine NOUL_YES kullanılır. */
+      function fix(d) {
+        d.rows.forEach(r => { if (r.jev) { const v = r.jev.verification; v.threshold = NOUL_YES; v.yes = v.noul >= NOUL_YES; } });
+        if (d.summary) d.summary.high_verification = d.rows.filter(r => r.jev && r.jev.verification.yes).length;
+        return d;
+      }
+      async function api(path, method) { return fix(await rawApi(path, method)); }
+      async function rawApi(path, method) {
+        if (DEMO) {
+          await sleep(path === "/api/analiz" ? 1100 : 350);
+          if (path === "/api/cevaplar") {
+            demoShown = Math.min(demoAll.length, demoShown + 5);
+            const rows = demoAll.slice(0, demoShown).map((r, i) => i < demoDone ? r : { ...r, jev: null });
+            return { rows, summary: demoSummary(rows) };
+          }
+          demoDone = demoShown;
+          const rows = demoAll.slice(0, demoShown);
+          return { rows, summary: demoSummary(rows) };
+        }
+        const res = await fetch(path, { method: method || "GET" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.detail || `İstek başarısız (${res.status})`);
+        return data;
+      }
+
+      /* ---------- Durum ---------- */
+      let rows = [], summary = null, selected = null, busy = false;
+      const els = new Map(), placed = new Set(), landed = new Set();
+      const yard = $("yard"), lanesEl = $("lanes"), axis = $("axis");
+      let filterV = false, filterU = false, max = 2, levelNames = ["Düşük", "Orta", "Yüksek"];
+
+      lanesEl.innerHTML = LANES.map(l => `
+  <div class="lane${l.wait ? " wait" : ""}" data-k="${l.key}">
+    <div class="lane-h"><div class="nm">${esc(l.name)}</div><div class="tr">${esc(l.tr)}</div><div class="ct" data-ct="${l.key}">0</div></div>
+    <div></div>
+  </div>`).join("");
+      const laneEl = k => lanesEl.querySelector(`.lane[data-k="${k}"]`);
+
+      const laneOf = r => !r.jev ? "_wait" : (LANES.some(l => l.key === r.jev.profile.choice && !l.wait) ? r.jev.profile.choice : "other");
+      const frac = r => r.jev ? Math.min(1, Math.max(0, r.jev.adoption.score / (r.jev.adoption.max || max))) : 0;
+
+      function wagonEl(r) {
+        let el = els.get(r.id);
+        if (!el) {
+          el = document.createElement("button");
+          el.type = "button"; el.className = "wagon nomove"; el.dataset.id = r.id;
+          el.addEventListener("click", () => select(r.id));
+          yard.appendChild(el); els.set(r.id, el);
+          setTimeout(() => el.classList.remove("nomove"), 60);
+        }
+        const j = r.jev;
+        el.className = el.className.replace(/\b(pending|yes|unc|err)\b/g, "").replace(/\s+/g, " ").trim();
+        if (r.error && !j) el.classList.add("err"); else if (!j) el.classList.add("pending");
+        if (j && j.verification.yes) el.classList.add("yes");
+        if (j && (j.profile.uncertain || j.adoption.uncertain)) el.classList.add("unc");
+        el.innerHTML = `${pad2(r.number)}<i></i>`;
+        el.setAttribute("aria-label", `Cevap ${r.number}` + (j ? `, ${j.profile.choice}, açıklık ${j.adoption.score.toFixed(2)}, doğrulama ${pct(j.verification.noul)}` : r.error ? ", hata" : ", JEV karar veriyor"));
+        el.title = j ? `Cevap ${r.number} · ${j.profile.choice} · ${j.adoption.score.toFixed(2)}` : `Cevap ${r.number}`;
+        return el;
+      }
+
+      /* ---------- Yerleşim ---------- */
+      function layout() {
+        const W = yard.clientWidth, lw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--lw")) || 176;
+        const trackW = W - lw, padX = 46;
+        const groups = Object.fromEntries(LANES.map(l => [l.key, []]));
+        rows.forEach(r => groups[laneOf(r)].push(r));
+        const plan = {};
+        LANES.forEach(l => {
+          const g = groups[l.key]; let items;
+          if (l.wait) {
+            const per = Math.max(1, Math.floor((trackW - 24) / (WW + 12)));
+            items = g.map((r, i) => ({ r, x: 12 + (i % per) * (WW + 12), sub: Math.floor(i / per) }));
+          } else {
+            items = g.map(r => ({ r, x: padX + frac(r) * (trackW - 2 * padX) - WW / 2 })).sort((a, b) => a.x - b.x);
+            const ends = [];
+            items.forEach(it => { let s = ends.findIndex(e => e + 8 <= it.x); if (s < 0) { s = ends.length; ends.push(0); } ends[s] = it.x + WW; it.sub = s; });
+          }
+          const subs = Math.max(1, ...items.map(i => i.sub + 1));
+          plan[l.key] = { items, subs };
+          laneEl(l.key).style.height = Math.max(l.wait ? 62 : 80, subs * SUB + 26) + "px";
+        });
+        let rails = "";
+        LANES.forEach(l => {
+          const top = laneEl(l.key).offsetTop, { items, subs } = plan[l.key];
+          for (let s = 0; s < subs; s++) rails += `<i class="rl" style="left:${lw}px;right:0;top:${top + 14 + s * SUB + WH + 2}px"></i>`;
+          items.forEach(it => { const el = wagonEl(it.r); el.style.left = (lw + it.x) + "px"; el.style.top = (top + 14 + it.sub * SUB) + "px"; });
+        });
+        $("rails").innerHTML = rails;
+        const axTop = axis.offsetTop;
+        let gl = "", ax = "";
+        for (let k = 0; k <= max; k++) {
+          const x = lw + padX + (k / max) * (trackW - 2 * padX);
+          gl += `<i class="gl" style="left:${x}px;height:${axTop}px"></i>`;
+          ax += `<span class="ax-l" style="left:${x}px"><b>${esc(levelNames[k] ?? k)}</b>${k}</span>`;
+        }
+        $("gridl").innerHTML = gl;
+        axis.querySelectorAll(".ax-l").forEach(n => n.remove());
+        axis.insertAdjacentHTML("beforeend", ax);
+      }
+
+      function counts() {
+        const c = {};
+        rows.forEach(r => { if (r.jev && landed.has(r.id)) { const k = laneOf(r); c[k] = (c[k] || 0) + 1; } });
+        c._wait = rows.filter(r => !r.jev).length;
+        LANES.forEach(l => {
+          const n = $("lanes").querySelector(`[data-ct="${l.key}"]`), v = String(c[l.key] || 0);
+          if (n.textContent !== v) { n.textContent = v; n.classList.add("bump"); setTimeout(() => n.classList.remove("bump"), 260); }
+        });
+      }
+
+      function renderSummary() {
+        const s = summary, box = $("sum");
+        if (!s) { box.innerHTML = ""; return; }
+        const val = (raw, small) => { const t = Array.isArray(raw) ? (raw.join(" · ") || "—") : String(raw); return `<b class="${small || t.length > 14 ? "s" : ""}">${esc(t)}</b>`; };
+        box.innerHTML = `
+    <div>${val(s.responses)}<span>Cevap</span></div>
+    <div>${val(s.profiles)}<span>En sık profil</span></div>
+    <div>${val(Number(s.average_adoption).toFixed(2) + " / " + s.adoption_max)}<span>Ortalama açıklık</span></div>
+    <div>${val(s.high_verification)}<span>Doğrulama lambası yanan</span></div>
+    <div>${val(s.uncertain)}<span>Belirsiz eşleşme</span></div>
+    <div>${val(s.usage_areas)}<span>En sık kullanım</span></div>
+    <div class="cost" tabindex="0" title="Üzerine gel: TL karşılığı (1 $ = ${TL_RATE} ₺ varsayımı)">
+      <div class="face usd">${val(money(s.cost), true)}<span>Toplam harcama · ${esc(s.tokens_in)}+${esc(s.tokens_out)} token</span></div>
+      <div class="face tl">${val(moneyTL(s.cost), true)}<span>TL karşılığı · 1 $ = ${TL_RATE} ₺</span></div>
+    </div>`;
+      }
+
+      function dispatchNote(r) {
+        const j = r.jev, d = $("dtext"), l = $("dlamp");
+        if (!j) return;
+        d.innerHTML = `<em>Cevap ${pad2(r.number)}</em> → <em>${esc(j.profile.choice)}</em> rayı <span class="mut">(%${Math.round(j.profile.confidence * 100)} güven)</span> · açıklık <em>${j.adoption.score.toFixed(2)}</em> · doğrulama <em>${pct(j.verification.noul)}</em> ${j.verification.yes ? "· lamba yandı" : ""}`;
+        l.classList.add("on"); setTimeout(() => l.classList.remove("on"), 700);
+      }
+
+      function applyFilter() {
+        els.forEach((el, id) => {
+          const r = rows.find(x => x.id === id), j = r && r.jev;
+          const ok = (!filterV && !filterU) || (filterV && j && j.verification.yes) || (filterU && j && (j.profile.uncertain || j.adoption.uncertain));
+          el.classList.toggle("dim", !ok);
+          el.classList.toggle("hit", ok && (filterV || filterU));
+        });
+        const n = rows.filter(r => r.jev && ((filterV && r.jev.verification.yes) || (filterU && (r.jev.profile.uncertain || r.jev.adoption.uncertain)))).length;
+        $("fcount").textContent = (filterV || filterU) ? `${n} / ${rows.length} vagon öne çıktı` : "";
+      }
+
+      /* ---------- Veri yükleme ---------- */
+      function setRows(next, nextSummary) {
+        rows = next; summary = nextSummary;
+        const f = rows.find(r => r.jev);
+        if (f) { max = f.jev.adoption.max || 2; const lv = f.jev.adoption.levels; if (lv && lv.length) levelNames = lv.map(x => x.label); }
+        const arriving = rows.filter(r => r.jev && !placed.has(r.id));
+        arriving.forEach((r, i) => { const el = wagonEl(r); el.style.setProperty("--dl", (reduce ? 0 : i * 200) + "ms"); });
+        layout(); applyFilter();
+        arriving.forEach((r, i) => {
+          placed.add(r.id);
+          const t = reduce ? 0 : i * 200 + 1550;
+          setTimeout(() => {
+            landed.add(r.id); counts(); dispatchNote(r);
+            const el = els.get(r.id); if (el) el.style.removeProperty("--dl");
+            if (i === arriving.length - 1) renderSummary();
+          }, t);
+        });
+        if (!arriving.length) renderSummary();
+        counts();
+        if (selected && !rows.some(r => r.id === selected)) selected = null;
+        renderDrawer();
+      }
+
+      async function cek(quiet) {
+        if (busy) return; busy = true;
+        const btn = $("cek"), banner = $("banner"), status = $("status");
+        banner.classList.remove("show"); btn.disabled = true;
+        status.textContent = quiet ? "Canlı · yeni cevap aranıyor" : "Form cevapları alınıyor";
+        try {
+          const form = await api("/api/cevaplar");
+          setRows(form.rows, form.summary);
+          const pending = form.rows.filter(r => !r.jev).map(r => r.id);
+          if (!pending.length) { status.textContent = rows.length ? `${rows.length} vagon · hepsi yönlendirildi` : "Henüz cevap yok"; return; }
+          status.textContent = `JEV karar veriyor · ${pending.length} vagon`;
+          const res = await api("/api/analiz", "POST");
+          setRows(res.rows, res.summary);
+          const failed = rows.filter(r => pending.includes(r.id) && r.error).length;
+          status.textContent = failed ? `${pending.length - failed} yönlendirildi · ${failed} hata` : `${pending.length} vagon yönlendirildi`;
+        } catch (e) {
+          banner.textContent = e.message; banner.classList.add("show"); status.textContent = "Çekilemedi";
+        } finally { busy = false; btn.disabled = false; }
+      }
+
+      /* ---------- Çekmece ---------- */
+      const trustPips = v => (v == null || v === "") ? '<span class="muted">Cevap yok</span>'
+        : `<span class="pips">${Array.from({ length: 5 }, (_, i) => `<i class="pip${i < Math.round(v) ? " on" : ""}"></i>`).join("")}</span> ${esc(v)} / 5`;
+      const txt = v => String(v ?? "").trim() ? esc(String(v).trim()) : '<span class="muted">Cevap yok</span>';
+      const bars = (items, thr) => `<div class="bars">${items.map(x => `
+  <div class="br${x.selected ? " on" : ""}"><span>${esc(x.label)}</span><span class="tk"><i data-w="${Math.round(x.p * 100)}"></i>${thr != null ? `<b class="thr" style="left:${thr * 100}%"></b>` : ""}</span><strong>${pct(x.p)}</strong></div>`).join("")}</div>`;
+
+      const confBar = c => `<div class="conf${c < 0.6 ? " low" : ""}"><span>JEV'in güveni</span><span class="tk"><i data-w="${Math.round(c * 100)}"></i><b class="thr" style="left:60%"></b></span><strong>${pct(c)}</strong></div>`;
+
+      function renderDrawer() {
+        const d = $("drawer"), r = rows.find(x => x.id === selected);
+        if (!r) {
+          d.innerHTML = `
+      <h2>Sahayı oku</h2>
+      <ul class="how">
+        <li><b>Hangi ray?</b><span><code>choice</code> · profil. JEV vagonu beş önceden döşenmiş raydan birine yönlendirir.</span></li>
+        <li><b>Rayda nerede?</b><span><code>score</code> · eğitimde AI kullanımına açıklık. Sağa gittikçe yüksek.</span></li>
+        <li><b>Lamba</b><span><code>noul</code> · doğrulama ihtiyacı. Olasılık ≥ ${pct(NOUL_YES)} ise lamba yanar ve çerçeve amber olur.</span></li>
+        <li><b>Kesikli</b><span><span class="sw" style="border-style:dashed"></span>choice veya score confidence değeri %60 altında: belirsiz eşleşme, saklanmıyor.</span></li>
+      </ul>
+      <p class="kbd"><kbd>C</kbd> çek · <kbd>L</kbd> canlı · <kbd>←</kbd><kbd>→</kbd> vagon · <kbd>Esc</kbd> kapat · <kbd>F</kbd> tam ekran</p>`;
+          return;
+        }
+        const j = r.jev, state = JSON.stringify(r.state, null, 2);
+        let body;
+        if (r.error && !j) body = `<p class="err-t">${esc(r.error)}</p>`;
+        else if (!j) body = `<p class="wait-t">JEV karar veriyor…</p>`;
+        else {
+          const p = j.profile, a = j.adoption, v = j.verification;
+          body = `
+      <section class="dec"><div class="hd"><span class="ty">choice · profil</span><span class="sub">${pct(p.confidence)} güven</span></div>
+        <p class="big">${esc(p.choice)}</p><div class="sub">${esc(p.label)}</div>${confBar(p.confidence)}${bars(p.options)}</section>
+      <section class="dec"><div class="hd"><span class="ty">score · açıklık</span><span class="sub">${pct(a.confidence)} güven</span></div>
+        <p class="big">${a.score.toFixed(2)} <small>/ ${esc(a.max)} · ${esc(a.level)}</small></p>${confBar(a.confidence)}${bars(a.levels)}</section>
+      <section class="dec"><div class="hd"><span class="ty">noul · doğrulama</span><span class="yn${v.yes ? "" : " no"}">${v.yes ? "EVET" : "HAYIR"}</span></div>
+        <p class="big">${pct(v.noul)}</p><div class="sub">Eşik ${pct(v.threshold)} · olasılıktır, hüküm değil.</div>
+        ${bars([{ label: "evet", p: v.noul, selected: v.yes }], v.threshold)}</section>
+      ${(p.uncertain || a.uncertain) ? '<p class="warn">Güven düşük: bu eşleşme belirsiz.</p>' : ""}
+      <p class="fn"><b>JEV'in güveni (confidence):</b> JEV'in seçtiği cevaba ne kadar emin olduğu. Kırmızı çizgi %60 sınırı; altı "belirsiz" sayılır. Kesinlik değil sinyaldir. <code>noul</code> tipinde confidence alanı yoktur.</p>
+      <h3>Uygulama bu cevabı şöyle okur</h3>
+      <pre class="codeb"><span class="k">answers.profile.choice</span>           <span class="v">"${esc(p.choice)}"</span>
+<span class="k">answers.adoption_readiness.score</span> <span class="v">${a.score.toFixed(2)}</span>
+<span class="k">answers.needs_verification.noul</span>  <span class="v">${v.noul.toFixed(2)}</span>
+<span class="a">if (noul >= ${v.threshold.toFixed(2)})</span> rozet_göster()   <span class="v">→ ${v.yes}</span></pre>
+      <p class="fn">Klasik LLM olsaydı: cevap bir cümle olarak gelir, bu üç değerin ayrıştırılması gerekirdi. Burada parse yok; alanlar doğrudan okunur.</p>
+      <p class="fn">${esc(j.model)} · giriş ${esc(j.usage.input_tokens ?? "—")} · çıkış ${esc(j.usage.output_tokens ?? "—")} token · ${money(j.usage.cost)}</p>`;
+        }
+        d.innerHTML = `
+    <div class="dh"><h2>Vagon ${pad2(r.number)}</h2><span>${esc(r.timestamp)}</span></div>
+    <h3>Yük · state</h3>
+    <div class="fld"><span class="muted">Kullanım alanı</span><p>${txt(r.ai_usage_area)}</p></div>
+    <div class="fld"><span class="muted">Yapay zekâya güveni (formdan)</span><p>${trustPips(r.trust_score)}</p></div>
+    <div class="fld"><span class="muted">Fayda beklentisi</span><p>${txt(r.benefit_answer)}</p></div>
+    <div class="fld"><span class="muted">Endişe</span><p>${txt(r.concern_answer)}</p></div>
+    <details class="st"><summary>state JSON</summary><pre>${esc(state)}</pre></details>
+    ${body}`;
+        requestAnimationFrame(() => requestAnimationFrame(() => d.querySelectorAll(".tk i").forEach(i => { i.style.width = i.dataset.w + "%"; })));
+      }
+
+      function select(id) {
+        selected = selected === id ? null : id;
+        els.forEach((el, k) => el.classList.toggle("sel", k === selected));
+        const r = rows.find(x => x.id === selected);
+        document.querySelectorAll(".lane").forEach(l => l.classList.toggle("hot", !!r && l.dataset.k === laneOf(r)));
+        renderDrawer();
+      }
+      function step(dir) {
+        if (!rows.length) return;
+        const order = [...rows].sort((a, b) => a.number - b.number), i = order.findIndex(r => r.id === selected);
+        const n = order[(i < 0 ? (dir > 0 ? 0 : order.length - 1) : (i + dir + order.length) % order.length)];
+        selected = null; select(n.id);
+      }
+
+      /* ---------- Kontroller ---------- */
+      $("cek").addEventListener("click", () => cek());
+      let timer = 0;
+      function setLive(on) {
+        const b = $("live"); b.setAttribute("aria-pressed", on); b.textContent = on ? "Canlı: açık" : "Canlı: kapalı";
+        clearInterval(timer); if (on) { cek(true); timer = setInterval(() => cek(true), 7000); }
+      }
+      $("live").addEventListener("click", () => setLive($("live").getAttribute("aria-pressed") !== "true"));
+      $("fv").addEventListener("click", e => { filterV = !filterV; e.currentTarget.setAttribute("aria-pressed", filterV); applyFilter(); });
+      $("fu").addEventListener("click", e => { filterU = !filterU; e.currentTarget.setAttribute("aria-pressed", filterU); applyFilter(); });
+      document.addEventListener("keydown", e => {
+        if (e.altKey || e.ctrlKey || e.metaKey) return;
+        const k = e.key.toLowerCase();
+        if (k === "c") cek();
+        else if (k === "l") $("live").click();
+        else if (k === "arrowright" || k === "arrowdown") { e.preventDefault(); step(1); }
+        else if (k === "arrowleft" || k === "arrowup") { e.preventDefault(); step(-1); }
+        else if (k === "escape" && selected) select(selected);
+        else if (k === "f") { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.().catch(() => { }); }
+      });
+      let rz = 0;
+      new ResizeObserver(() => {
+        els.forEach(el => el.classList.add("nomove"));
+        layout(); clearTimeout(rz); rz = setTimeout(() => els.forEach(el => el.classList.remove("nomove")), 80);
+      }).observe(yard);
+
+      if (DEMO) $("status").textContent = "DEMO verisi · backend gerekmez";
+      layout(); counts(); renderDrawer();
+    })();
+  </script>
+</body>
+
+</html>

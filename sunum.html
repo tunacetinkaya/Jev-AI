@@ -1,0 +1,1345 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JEV · Makas Kulesi — Metin değil, karar</title>
+<meta name="description" content="JEV AI (TypeSafe System One): serbest metin değil, yazılımın doğrudan kullandığı tipli kararlar. Klasik LLM ile dip notlu karşılaştırmalı sunum.">
+<!--
+  Tasarım notu — Form B (raylı uzun-form sunum).
+  JEV bir "karar katmanı" olduğu için sayfa bir makas kulesi gibi kurgulandı: state vagon, questions makas, noul/choice/score kuledeki üç kol;
+  sunum ortamında klavyeyle durak durak ilerlenebilmesi için sabit ray navigasyonu ve numaralı sahneler seçildi.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=Spline+Sans+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --soot:#0e0e0c; --soot-2:#151412; --soot-3:#1d1c19;
+  --steel:#2c2a26; --rail:#56524a; --rail-hi:#8a8478;
+  --chalk:#ebe5d5; --dim:#9a9486; --faint:#625e55;
+  --amber:#ffb000; --go:#3ccf86; --stop:#ff4b3e;
+  --f-display:"Big Shoulders Display","Haettenschweiler","Impact",sans-serif;
+  --f-mono:"Spline Sans Mono","SF Mono","Menlo","Consolas",monospace;
+  --rail-w:92px;
+  --ease:cubic-bezier(.2,.7,.1,1);
+}
+*{box-sizing:border-box}
+html{background:var(--soot);scroll-snap-type:y proximity}
+body{
+  margin:0;color:var(--chalk);font-family:var(--f-mono);
+  font-size:clamp(14px,1.02vw,16px);line-height:1.6;
+  background:
+    radial-gradient(1100px 680px at 88% -12%,rgba(255,176,0,.10),transparent 62%),
+    radial-gradient(900px 600px at -10% 112%,rgba(255,176,0,.045),transparent 60%),
+    var(--soot);
+  background-attachment:fixed;
+  -webkit-font-smoothing:antialiased;
+}
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:200;opacity:.085;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+::selection{background:var(--amber);color:var(--soot)}
+a{color:var(--amber)}
+code{font-family:var(--f-mono);color:var(--amber);font-size:.92em}
+.skip{position:absolute;left:12px;top:-60px;z-index:300;background:var(--amber);color:var(--soot);padding:10px 14px;font-weight:700;text-decoration:none}
+.skip:focus{top:12px}
+:focus-visible{outline:2px solid var(--amber);outline-offset:3px}
+
+/* ---------- Ray navigasyonu ---------- */
+.rail{position:fixed;left:0;top:0;bottom:0;width:var(--rail-w);z-index:50;display:flex;align-items:center;justify-content:center}
+.rail::before{content:"";position:absolute;top:0;bottom:0;left:50%;width:32px;transform:translateX(-50%);background:repeating-linear-gradient(180deg,#22201c 0 4px,transparent 4px 14px)}
+.rail::after{content:"";position:absolute;top:0;bottom:0;left:50%;width:12px;transform:translateX(-50%);border-left:2px solid #3b3833;border-right:2px solid #3b3833}
+.rail-fill{position:absolute;top:0;left:50%;width:12px;transform:translateX(-50%);height:calc(var(--p,0)*100%);border-left:2px solid var(--amber);border-right:2px solid var(--amber);z-index:1;transition:height .15s linear}
+.rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:clamp(16px,4vh,38px);position:relative;z-index:2}
+.rail a{display:flex;align-items:center;justify-content:center;position:relative;width:26px;height:26px;text-decoration:none;color:var(--dim)}
+.rail .dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--rail-hi);background:var(--soot);transition:.3s var(--ease)}
+.rail .lbl{position:absolute;left:32px;white-space:nowrap;font:800 12px/1 var(--f-display);letter-spacing:.16em;text-transform:uppercase;background:var(--soot);border:1px solid var(--steel);padding:6px 8px;opacity:0;transform:translateX(-6px);transition:.25s var(--ease);pointer-events:none}
+.rail a:hover .lbl,.rail a:focus-visible .lbl{opacity:1;transform:none}
+.rail a[aria-current] .dot{background:var(--amber);border-color:var(--amber);box-shadow:0 0 0 4px rgba(255,176,0,.14),0 0 16px rgba(255,176,0,.55)}
+.rail a[aria-current] .lbl{color:var(--amber)}
+.hud{position:fixed;right:18px;bottom:14px;z-index:60;font:500 11px/1 var(--f-mono);color:var(--faint);letter-spacing:.06em;background:rgba(14,14,12,.8);padding:7px 10px;border:1px solid #23211d}
+.hud b{color:var(--amber);font-weight:700}
+
+/* ---------- Sahne iskeleti ---------- */
+main{display:block}
+.scene{
+  position:relative;min-height:100vh;min-height:100svh;scroll-snap-align:start;
+  padding:clamp(36px,7vh,80px) clamp(20px,5vw,84px) clamp(36px,7vh,80px) calc(var(--rail-w) + clamp(16px,3.4vw,60px));
+  display:flex;flex-direction:column;justify-content:center;
+  border-top:1px solid #1f1d1a;
+}
+.scene>*{max-width:1320px;width:100%}
+.plate{display:inline-flex;align-items:center;gap:.9em;margin:0;font:800 13px/1 var(--f-display);letter-spacing:.2em;text-transform:uppercase;color:var(--amber)}
+.plate::before{content:"";width:36px;height:10px;background:repeating-linear-gradient(-45deg,var(--amber) 0 5px,transparent 5px 10px)}
+h1,h2,h3{font-family:var(--f-display);text-transform:uppercase;margin:0}
+h1{font-weight:900;font-size:clamp(60px,9.4vw,158px);line-height:.96;letter-spacing:-.005em;margin:.18em 0 .28em}
+h2{font-weight:900;font-size:clamp(42px,6vw,98px);line-height:.98;margin:.22em 0 .28em;max-width:15ch}
+h3{font-weight:800;font-size:15px;letter-spacing:.16em;color:var(--dim)}
+h1 em,h2 em{font-style:normal;color:var(--amber)}
+.lede{max-width:56ch;font-size:clamp(15px,1.2vw,18px);margin:0 0 clamp(18px,3vh,30px);color:var(--chalk)}
+.fine{font-size:11.5px;line-height:1.5;color:var(--faint);margin:10px 0 0;max-width:80ch}
+
+/* Anons kaydı: klasik LLM dip notu */
+.anons{position:relative;max-width:74ch;margin-top:clamp(18px,3.6vh,36px);padding:12px 16px 12px 24px;font-size:12.5px;line-height:1.6;color:var(--dim);border:1px dashed #3a3832;border-left:0;background:linear-gradient(90deg,rgba(255,255,255,.025),transparent 70%)}
+.anons::before{content:"";position:absolute;left:0;top:0;bottom:0;width:8px;background:radial-gradient(circle at 4px 6px,var(--soot) 2.2px,#3a3832 2.8px) 0 0/8px 12px}
+.anons b{display:block;font:800 11px/1.2 var(--f-display);letter-spacing:.2em;text-transform:uppercase;color:var(--chalk);margin-bottom:4px}
+.anons b::before{content:"◖ "}
+.anons q{color:var(--chalk);font-style:italic}
+
+/* Reveal */
+.js [data-r]{opacity:0;transform:translateY(18px);transition:opacity .7s var(--ease),transform .7s var(--ease);transition-delay:calc(var(--d,0)*110ms)}
+.js .seen [data-r]{opacity:1;transform:none}
+
+/* JSON */
+pre.json{margin:0;font:400 12.5px/1.62 var(--f-mono);color:#7f796d;background:#0a0a09;border:1px solid #2a2824;padding:14px 16px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2;position:relative}
+pre.json[data-label]{padding-top:34px}
+pre.json[data-label]::before{content:attr(data-label);position:absolute;top:0;left:0;right:0;padding:6px 12px;font:800 10.5px/1.4 var(--f-display);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);border-bottom:1px solid #22201c;background:#0d0d0b}
+.json .k{color:var(--amber)}
+.json .s{color:#e4dcc8}
+.json .n{color:var(--go)}
+.json .b{color:#ff8a5c}
+.json .u{color:var(--dim)}
+.json .k.hl{background:rgba(255,176,0,.16);outline:1px solid rgba(255,176,0,.55)}
+.json.flash{animation:flash .9s var(--ease)}
+@keyframes flash{0%{border-color:var(--amber);box-shadow:0 0 0 3px rgba(255,176,0,.15)}100%{border-color:#2a2824;box-shadow:none}}
+
+.btn{font:700 13px/1 var(--f-mono);letter-spacing:.04em;color:var(--soot);background:var(--amber);border:0;padding:12px 16px;cursor:pointer;clip-path:polygon(0 0,calc(100% - 10px) 0,100% 50%,calc(100% - 10px) 100%,0 100%);padding-right:24px;transition:filter .2s}
+.btn:hover{filter:brightness(1.1)}
+.btn.ghost{background:transparent;color:var(--chalk);border:1px solid var(--rail);clip-path:none;padding-right:16px}
+
+/* ---------- 00 · Kule (hero) ---------- */
+.hero-grid{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.35fr);gap:clamp(16px,3.5vw,60px);align-items:center}
+.brand{margin:0;font:800 14px/1 var(--f-display);letter-spacing:.22em;text-transform:uppercase;color:var(--dim)}
+.brand span{display:inline-block;padding:4px 9px 3px;border:2px solid var(--amber);color:var(--amber);margin-right:10px}
+.hint{font-size:12px;color:var(--faint);margin:0}
+.hint kbd{font:inherit;color:var(--chalk);border:1px solid var(--rail);padding:1px 6px}
+.yard{margin:0}
+.yard svg{display:block;width:100%;height:auto;overflow:visible}
+.yard figcaption,.cap{font-size:12px;color:var(--dim);border-top:1px solid var(--steel);padding-top:9px;margin-top:8px;min-height:4.2em}
+.yard figcaption q{color:var(--chalk)}
+.yard figcaption strong{color:var(--amber);font-weight:500}
+.bed{fill:none;stroke:#23211d;stroke-width:28;stroke-dasharray:4 11}
+.ro{fill:none;stroke:var(--rail);stroke-width:12;transition:stroke .35s}
+.ri{fill:none;stroke:var(--soot);stroke-width:6}
+.ro.on{stroke:var(--amber)}
+.tl{font:500 17px var(--f-mono);fill:var(--faint);transition:fill .3s}
+.tl.on{fill:var(--amber)}
+.lp{fill:#25231f;stroke:var(--rail);stroke-width:2;transition:fill .25s}
+.lp.on{fill:var(--go);stroke:var(--go);filter:drop-shadow(0 0 8px var(--go))}
+.mast-h{fill:#1b1a17;stroke:var(--rail);stroke-width:2}
+.mast-l{fill:#3a372f;transition:fill .2s}
+.mast.on .mast-l{fill:var(--amber);filter:drop-shadow(0 0 8px var(--amber))}
+.svgtxt{font:800 15px var(--f-display);letter-spacing:.18em;fill:var(--dim)}
+.wag-b{fill:var(--amber)}
+.wag-t{font:700 13px var(--f-mono);fill:var(--soot)}
+
+/* ---------- 01 · Anons ↔ Makas ---------- */
+.stub{grid-column:1/-1;display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--steel);background:repeating-linear-gradient(-45deg,rgba(255,176,0,.035) 0 8px,transparent 8px 16px);font-size:13px}
+.stub span{font-weight:700;color:var(--soot);background:var(--chalk);padding:2px 7px}
+.stub em{color:var(--dim)}
+.duel{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--steel)}
+.lane{padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-height:330px}
+.lane-llm{border-right:1px dashed var(--rail)}
+.lane header{font:800 14px/1 var(--f-display);letter-spacing:.18em;text-transform:uppercase;display:flex;align-items:center;gap:10px}
+.lane-llm header{color:var(--dim)}
+.lane-jev header{color:var(--amber)}
+.ico{width:12px;height:12px;border-radius:50%;background:var(--rail)}
+.lane-jev .ico{background:var(--amber);box-shadow:0 0 10px var(--amber)}
+.speech{flex:1;font-size:clamp(15px,1.25vw,18px);line-height:1.6;white-space:pre-wrap;color:var(--chalk)}
+.speech::before{content:"“";color:var(--faint)}
+.caret{display:inline-block;width:.55em;height:1.05em;vertical-align:-2px;background:var(--dim);animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+.parse{font-size:12.5px;border-top:1px solid var(--steel);padding-top:10px;display:grid;gap:4px}
+.parse code{color:var(--dim)}
+.parse output{font-weight:700}
+.parse .why{color:var(--dim);font-size:12px}
+.warn{color:var(--amber)} .fail{color:var(--stop)} .ok{color:var(--go)}
+.lane-jev pre.json{flex:1}
+.duel-ctl{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-top:14px}
+.tally{font-size:12.5px;color:var(--dim)}
+.tally b{color:var(--chalk)}
+
+/* ---------- 02 · Vagon (state) ---------- */
+.train{display:flex;align-items:flex-end;gap:0;flex-wrap:wrap;margin-bottom:20px}
+.car{position:relative;font:800 15px/1 var(--f-display);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);background:var(--soot-3);border:2px solid var(--rail);padding:16px 22px 18px;margin:0 22px 14px 0;cursor:pointer;transition:.25s var(--ease)}
+.car::before,.car::after{content:"";position:absolute;bottom:-12px;width:14px;height:14px;border-radius:50%;background:var(--soot);border:3px solid var(--rail)}
+.car::before{left:14px}.car::after{right:14px}
+.car+.car{}
+.car .cp{position:absolute;left:-24px;top:50%;width:22px;height:2px;background:var(--rail)}
+.car[aria-selected=true]{color:var(--soot);background:var(--amber);border-color:var(--amber);transform:translateY(-4px)}
+.car small{display:block;font:400 10.5px/1.3 var(--f-mono);letter-spacing:0;text-transform:none;margin-top:5px;opacity:.8}
+.car-x{font-size:12px;color:var(--faint);border:2px dashed #3a3832;padding:14px 16px;margin:0 0 14px;position:relative}
+.car-x s{color:var(--dim)}
+.state-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:clamp(16px,3vw,44px);align-items:start}
+.mnote{font-size:12.5px;color:var(--dim);margin:10px 0 0}
+.mnote code{color:var(--amber)}
+.placard{border:2px solid var(--chalk);padding:18px 20px;position:relative;background:var(--soot-2)}
+.placard::before{content:"";position:absolute;inset:6px;border:1px solid #3a3832;pointer-events:none}
+.placard h3{color:var(--chalk);margin-bottom:10px}
+.placard ol{margin:0;padding:0;list-style:none;counter-reset:r;font-size:13px}
+.placard li{counter-increment:r;display:grid;grid-template-columns:30px 1fr;padding:6px 0;border-top:1px dashed #2f2d28}
+.placard li::before{content:counter(r,decimal-leading-zero);font:800 15px var(--f-display);color:var(--amber)}
+
+/* ---------- 03 · Makas (questions) ---------- */
+.q-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:clamp(16px,3vw,44px);align-items:start}
+pre.anno{white-space:pre-wrap;font-size:13px}
+.anno .c{transition:background .2s,outline-color .2s;outline:1px solid transparent}
+.anno .c.lit{background:rgba(255,176,0,.12);outline-color:rgba(255,176,0,.6)}
+.callouts{list-style:none;margin:0;padding:0;font-size:13px}
+.callouts li{display:grid;grid-template-columns:34px 1fr;gap:4px;padding:9px 6px;border-top:1px solid var(--steel);cursor:default;transition:background .2s}
+.callouts li::before{content:attr(data-c);font:900 22px/1 var(--f-display);color:var(--faint);transition:color .2s}
+.callouts li.lit{background:rgba(255,176,0,.06)}
+.callouts li.lit::before{color:var(--amber)}
+.callouts b{font:800 13px var(--f-display);letter-spacing:.14em;text-transform:uppercase;color:var(--chalk);margin-right:6px}
+.qq{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px}
+.qq h3{margin-bottom:8px}
+.qq ul{list-style:none;margin:0;padding:0;font-size:12.5px}
+.qq li{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px dashed #2f2d28}
+.qq-bad p{font-size:13px;margin:0;color:var(--dim)}
+.qq-bad s{text-decoration-color:var(--stop);text-decoration-thickness:2px}
+.derail{display:block;width:100%;height:34px;margin-top:6px}
+
+/* ---------- 04 · Kollar ---------- */
+.lv-grid{display:grid;grid-template-columns:250px minmax(0,1fr) minmax(0,1fr);gap:clamp(16px,2.6vw,40px);align-items:start}
+.frame{display:flex;justify-content:space-between;align-items:flex-end;position:relative;padding:8px 6px 18px}
+.frame::after{content:"";position:absolute;left:0;right:0;bottom:6px;height:12px;background:repeating-linear-gradient(90deg,#3a372f 0 18px,#2a2824 18px 22px);border-top:2px solid var(--rail)}
+.lever{display:grid;justify-items:center;gap:6px;background:none;border:0;color:var(--dim);cursor:pointer;padding:8px 4px;font:inherit}
+.rod{display:block;width:10px;height:150px;border-radius:4px;background:linear-gradient(90deg,#777166,#3a3732);position:relative;transform-origin:50% 100%;transform:rotate(13deg);transition:transform .55s cubic-bezier(.5,1.6,.4,1)}
+.knob{position:absolute;top:-12px;left:50%;width:30px;height:22px;transform:translateX(-50%);border-radius:4px;background:var(--steel);border:2px solid var(--rail);transition:.3s}
+.lever[aria-selected=true] .rod{transform:rotate(-13deg)}
+.lever[aria-selected=true] .knob{background:var(--amber);border-color:var(--amber);box-shadow:0 0 14px rgba(255,176,0,.6)}
+.lever .ln{font:900 22px/1 var(--f-display);letter-spacing:.06em;color:var(--chalk);position:relative;z-index:1;margin-top:10px}
+.lever .ls{font-size:10.5px;line-height:1.3;text-align:center;max-width:9ch}
+.lever[aria-selected=true] .ln{color:var(--amber)}
+.ph{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:12px}
+.ph .pt{font:900 30px/1 var(--f-display);color:var(--amber);text-transform:uppercase}
+.ph .pn{font-size:13px;color:var(--chalk)}
+.ph .pa{font-size:12px;color:var(--dim)}
+.gauge{min-height:210px;border:1px solid var(--steel);padding:18px;background:var(--soot-2)}
+pre.rule{margin:12px 0 0;font:400 12.5px/1.7 var(--f-mono);color:var(--chalk);border-left:3px solid var(--amber);padding:6px 12px;background:#0b0b0a;white-space:pre-wrap}
+.jt{display:flex;gap:0;margin-bottom:-1px}
+.jt button{font:800 12px/1 var(--f-display);letter-spacing:.18em;text-transform:uppercase;background:none;color:var(--dim);border:1px solid var(--steel);border-bottom:0;padding:9px 14px;cursor:pointer}
+.jt button[aria-selected=true]{color:var(--soot);background:var(--amber);border-color:var(--amber)}
+#lvJson{max-height:46vh}
+/* göstergeler */
+.g-noul{padding-top:34px}
+.g-track{position:relative;height:16px;background:repeating-linear-gradient(90deg,#2a2824 0 1px,transparent 1px 10%) ,#191815;border:1px solid var(--rail)}
+.g-fill{position:absolute;left:0;top:0;bottom:0;width:calc(var(--v,0)*100%);background:linear-gradient(90deg,rgba(60,207,134,.25),var(--go));transition:width 1.2s var(--ease)}
+.g-thr{position:absolute;top:-10px;bottom:-10px;width:2px;background:var(--stop)}
+.g-thr span{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-size:10.5px;color:var(--stop);white-space:nowrap;padding-bottom:2px}
+.g-pin{position:absolute;top:100%;left:calc(var(--v,0)*100%);transform:translateX(-50%);transition:left 1.2s var(--ease);padding-top:8px}
+.g-pin b{display:block;font:900 34px/1 var(--f-display);color:var(--go)}
+.g-pin::before{content:"";position:absolute;top:0;left:50%;border:6px solid transparent;border-bottom-color:var(--go);transform:translate(-50%,-6px)}
+.g-scale{display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:52px}
+.cb{display:grid;grid-template-columns:86px 1fr 44px;gap:10px;align-items:center;font-size:12.5px;padding:6px 0}
+.cb-k{color:var(--dim)}
+.cb-bar{height:12px;background:#191815;border:1px solid #2f2d28;position:relative}
+.cb-bar i{position:absolute;inset:0 auto 0 0;width:0;background:var(--rail-hi);transition:width 1.1s var(--ease)}
+.g.on .cb-bar i{width:calc(var(--w)*100%)}
+.cb.pick .cb-k,.cb.pick .cb-v{color:var(--amber);font-weight:700}
+.cb.pick .cb-bar i{background:var(--amber)}
+.cb-v{text-align:right;color:var(--dim)}
+.g-head{font-size:12px;color:var(--dim);margin-bottom:6px}
+.g-head b{font:900 30px/1 var(--f-display);color:var(--amber);margin-right:8px;vertical-align:-3px}
+.dial{display:block;width:100%;max-width:300px;margin:0 auto}
+.dial .seg{fill:none;stroke-width:18}
+.dial .s0{stroke:#3a372f}.dial .s1{stroke:#7a5a10}.dial .s2{stroke:var(--amber)}
+.dial text{font:800 12px var(--f-display);letter-spacing:.14em;fill:var(--dim);text-transform:uppercase}
+.needle{transform-origin:150px 150px;transform-box:view-box;transform:rotate(-90deg);transition:transform 1.4s cubic-bezier(.4,1.5,.5,1)}
+.needle line{stroke:var(--chalk);stroke-width:3}
+.needle circle{fill:var(--chalk)}
+
+/* ---------- 05 · Tek sefer ---------- */
+.multi{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:clamp(16px,3vw,44px);align-items:start}
+#multiReq{max-height:62vh}
+.multi pre.json.sending::after{content:"";position:absolute;left:0;right:0;height:40px;top:0;background:linear-gradient(180deg,transparent,rgba(255,176,0,.18),transparent);animation:sweep .7s linear}
+@keyframes sweep{from{transform:translateY(-40px)}to{transform:translateY(900px)}}
+.fan{display:grid;grid-template-columns:108px 1fr minmax(160px,auto);grid-template-rows:repeat(3,64px);align-items:center;column-gap:0}
+.fan-wag{grid-column:1;grid-row:1/4;align-self:center;background:var(--amber);color:var(--soot);font-weight:700;font-size:13px;padding:14px 10px;text-align:center}
+.fan-wag small{display:block;font-weight:400;font-size:10.5px}
+.fan-ln{grid-column:2;height:2px;position:relative;background:repeating-linear-gradient(90deg,var(--rail) 0 6px,transparent 6px 12px)}
+.fan-ln::after{content:"";position:absolute;inset:-1px 0;background:var(--amber);transform:scaleX(0);transform-origin:left;transition:transform .6s var(--ease)}
+.fan.go .fan-ln::after{transform:scaleX(1)}
+.fan.go .fan-ln:nth-of-type(2)::after{transition-delay:.12s}
+.fan.go .fan-ln:nth-of-type(3)::after{transition-delay:.24s}
+.fan-out{grid-column:3;border:1px solid var(--steel);padding:8px 12px;background:var(--soot-2);font-size:12px;line-height:1.35;display:grid}
+.fan-out .ft{color:var(--faint);font-size:10.5px}
+.fan-out output{font:900 22px/1.1 var(--f-display);color:var(--dim);transition:color .3s}
+.fan.go .fan-out output{color:var(--amber)}
+.fan-out small{color:var(--dim);font-size:10.5px}
+.rule span{display:block;opacity:.32;transition:opacity .35s,color .35s}
+.rule span.lit{opacity:1;color:var(--go)}
+.rule span.lit::after{content:"  ✓"}
+.tokens{font-size:12.5px;color:var(--dim);margin:12px 0}
+.tokens b{font:900 24px/1 var(--f-display);color:var(--chalk);margin:0 4px}
+details.raw summary{cursor:pointer;font-size:12.5px;color:var(--dim);margin:12px 0 8px}
+details.raw pre{max-height:40vh}
+
+/* ---------- 06 · Kapı ---------- */
+.gate{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(16px,3vw,44px);align-items:start}
+.sigbox{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:start}
+.mast2{display:grid;gap:10px;background:#111;border:2px solid var(--rail);padding:12px 10px;border-radius:30px;position:relative}
+.mast2::after{content:"";position:absolute;left:50%;top:100%;width:8px;height:60px;background:var(--rail);transform:translateX(-50%)}
+.mast2 i{width:34px;height:34px;border-radius:50%;background:#262420;transition:.3s}
+.mast2 i.g.on{background:var(--go);box-shadow:0 0 22px var(--go)}
+.mast2 i.a.on{background:var(--amber);box-shadow:0 0 22px var(--amber)}
+.mast2 i.r.on{background:var(--stop);box-shadow:0 0 22px var(--stop)}
+.verdict-out{font:900 clamp(34px,4vw,58px)/.95 var(--f-display);text-transform:uppercase;margin:0 0 6px}
+.verdict-out.g{color:var(--go)}.verdict-out.a{color:var(--amber)}.verdict-out.r{color:var(--stop)}
+.vwhy{font-size:13px;color:var(--dim);margin:0 0 14px}
+.ctl{display:grid;gap:6px;font-size:12.5px;color:var(--dim);margin-bottom:14px}
+.ctl output{font:900 22px/1 var(--f-display);color:var(--chalk)}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:26px;background:transparent;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:6px;background:linear-gradient(90deg,var(--stop) 0 60%,var(--amber) 60% 90%,var(--go) 90%)}
+input[type=range]::-moz-range-track{height:6px;background:linear-gradient(90deg,var(--stop) 0 60%,var(--amber) 60% 90%,var(--go) 90%)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:26px;margin-top:-10px;background:var(--chalk);border:2px solid var(--soot)}
+input[type=range]::-moz-range-thumb{width:14px;height:24px;border-radius:0;background:var(--chalk);border:2px solid var(--soot)}
+.seg2{display:inline-flex;border:1px solid var(--rail);margin-bottom:14px}
+.seg2 button{font:500 12.5px/1 var(--f-mono);background:none;color:var(--dim);border:0;padding:10px 12px;cursor:pointer}
+.seg2 button[aria-checked=true]{background:var(--chalk);color:var(--soot)}
+.rule2 span{display:block;opacity:.32;transition:.3s}
+.rule2 span.lit{opacity:1;color:var(--amber)}
+.careful{font-size:12px;color:var(--dim);margin-top:14px}
+.careful strong{font:800 11px var(--f-display);letter-spacing:.18em;color:var(--stop);text-transform:uppercase;margin-right:8px}
+
+/* ---------- 07 · Hat ---------- */
+.line{position:relative;margin:30px 0 70px;height:14px;border-top:2px solid var(--rail);border-bottom:2px solid var(--rail);background:repeating-linear-gradient(90deg,#24221e 0 3px,transparent 3px 14px)}
+.st{position:absolute;top:50%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:var(--soot);border:3px solid var(--rail-hi)}
+.st.j{border-color:var(--amber);background:var(--amber)}
+.st.l{border-color:var(--chalk);background:var(--soot)}
+.st span{position:absolute;top:24px;left:50%;transform:translateX(-50%);width:max-content;max-width:16ch;text-align:center;font-size:11.5px;line-height:1.3;color:var(--dim)}
+.st.j span{color:var(--amber)} .st.l span{color:var(--chalk)}
+.st span b{display:block;font:800 13px var(--f-display);letter-spacing:.14em;text-transform:uppercase}
+.st:first-child span{left:0;transform:none;text-align:left}
+.st.end span{left:auto;right:0;transform:none;text-align:right}
+.mover{position:absolute;top:50%;left:0;width:34px;height:18px;margin:-9px 0 0 -17px;background:var(--amber);z-index:2}
+.seen .mover{animation:ride 9s var(--ease) infinite}
+@keyframes ride{0%,8%{left:0}22%,30%{left:25%}44%,52%{left:50%}66%,74%{left:75%}88%,100%{left:100%}}
+.dispatch{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:clamp(16px,3vw,44px);align-items:center;border:1px solid var(--steel);padding:18px 20px;background:var(--soot-2)}
+.dq-no{font:800 12px var(--f-display);letter-spacing:.2em;color:var(--faint);text-transform:uppercase}
+.dq-task{font:800 clamp(22px,2.3vw,32px)/1.1 var(--f-display);text-transform:uppercase;margin:6px 0 0}
+.dq-btns{display:flex;gap:10px;flex-wrap:wrap}
+.dq-btns .btn.ghost[data-to=jev]{border-color:var(--amber);color:var(--amber)}
+.dq-fb{font-size:13px;margin:10px 0 0;min-height:2.6em;grid-column:1/-1}
+.dq-score{font-size:12px;color:var(--dim);margin:0}
+.dq-score b{color:var(--chalk)}
+
+/* ---------- 08 · Son sinyal ---------- */
+.verdict{display:grid;gap:.12em;max-width:none;font-size:clamp(34px,5.4vw,88px);line-height:1}
+.verdict .v1{color:transparent;-webkit-text-stroke:1.5px var(--rail-hi)}
+.verdict .v2{color:var(--amber)}
+.close-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:clamp(16px,3vw,44px);align-items:start;margin-top:12px}
+details.tarife{border:1px solid var(--steel);background:#0a0a09}
+details.tarife summary{cursor:pointer;padding:12px 14px;font:800 13px var(--f-display);letter-spacing:.2em;text-transform:uppercase;color:var(--amber)}
+.tarife table{width:100%;border-collapse:collapse;font-size:12px}
+.tarife th,.tarife td{text-align:left;padding:7px 12px;border-top:1px dashed #2a2824;vertical-align:top}
+.tarife thead th{font:800 11px var(--f-display);letter-spacing:.2em;text-transform:uppercase;color:var(--faint)}
+.tarife td:nth-child(2){color:var(--amber)}
+.tarife td:nth-child(3){color:var(--dim)}
+.tarife th[scope=row]{color:var(--chalk);font-weight:500}
+.src{font-size:12.5px;padding:0;margin:0;list-style:none}
+.src li{padding:5px 0;border-bottom:1px dashed #2a2824}
+.colophon{font-size:11.5px;color:var(--faint);margin-top:18px;max-width:70ch}
+
+/* ---------- Mobil ---------- */
+@media (max-width:1100px){
+  .lv-grid{grid-template-columns:1fr 1fr}
+  .lv-grid .frame{grid-column:1/-1;max-width:340px}
+}
+@media (max-width:820px){
+  :root{--rail-w:0px}
+  .rail{top:0;bottom:auto;height:4px;width:100%;display:block}
+  .rail::before,.rail::after,.rail ol{display:none}
+  .rail-fill{left:0;transform:none;top:0;height:4px;width:calc(var(--p,0)*100%);border:0;background:var(--amber)}
+  .hud .k{display:none}
+  .scene{padding:56px 18px 48px;scroll-snap-align:none}
+  .hero-grid,.duel,.state-grid,.q-grid,.lv-grid,.multi,.gate,.dispatch,.close-grid,.qq{grid-template-columns:1fr}
+  .lane-llm{border-right:0;border-bottom:1px dashed var(--rail)}
+  .lane{min-height:0}
+  .speech{min-height:6.5em}
+  .fan{grid-template-columns:76px 1fr minmax(130px,auto)}
+  .line{margin-bottom:96px}
+  .st span{font-size:10px;max-width:10ch}
+  .st span b{font-size:11px}
+  .sigbox{grid-template-columns:auto 1fr}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .js [data-r]{opacity:1;transform:none}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#s0">İçeriğe geç</a>
+
+<nav class="rail" aria-label="Sunum durakları">
+  <i class="rail-fill"></i>
+  <ol>
+    <li><a href="#s0" data-i="0"><i class="dot"></i><span class="lbl">00 · Kule</span></a></li>
+    <li><a href="#s1" data-i="1"><i class="dot"></i><span class="lbl">01 · Anons</span></a></li>
+    <li><a href="#s2" data-i="2"><i class="dot"></i><span class="lbl">02 · Vagon</span></a></li>
+    <li><a href="#s3" data-i="3"><i class="dot"></i><span class="lbl">03 · Makas</span></a></li>
+    <li><a href="#s4" data-i="4"><i class="dot"></i><span class="lbl">04 · Kollar</span></a></li>
+    <li><a href="#s5" data-i="5"><i class="dot"></i><span class="lbl">05 · Tek sefer</span></a></li>
+    <li><a href="#s6" data-i="6"><i class="dot"></i><span class="lbl">06 · Kapı</span></a></li>
+    <li><a href="#s7" data-i="7"><i class="dot"></i><span class="lbl">07 · Hat</span></a></li>
+    <li><a href="#s8" data-i="8"><i class="dot"></i><span class="lbl">08 · Son sinyal</span></a></li>
+  </ol>
+</nav>
+<div class="hud" aria-hidden="true"><b id="hudNo">00</b> / 08 · <span id="hudName">Kule</span><span class="k"> · ↑↓ gez · 0–8 atla · F tam ekran</span></div>
+
+<main id="main">
+
+<!-- 00 · KULE -->
+<section class="scene" id="s0" data-name="Kule" aria-labelledby="h0">
+  <div class="hero-grid">
+    <div>
+      <p class="brand" data-r><span>JEV</span>System One · TypeSafe</p>
+      <h1 id="h0" data-r style="--d:1">Metin<br>değil,<br><em>makas.</em></h1>
+      <p class="lede" data-r style="--d:2">Klasik bir LLM konuşur. JEV, yazılımın hangi raya gireceğine karar verir — rayları ise siz, istek yola çıkmadan önce döşersiniz.</p>
+      <p class="hint" data-r style="--d:3"><kbd>↓</kbd> ilerle · <kbd>0–8</kbd> durağa atla · <kbd>F</kbd> tam ekran</p>
+    </div>
+    <figure class="yard" data-r style="--d:2">
+      <svg viewBox="0 0 1000 600" role="img" aria-labelledby="yardT">
+        <title id="yardT">Makas sahası: bir destek talebi vagonu JEV makasından geçerek billing, technical, account veya other raylarından birine yönlenir.</title>
+        <g id="beds"></g><g id="outers"></g><g id="inners"></g>
+        <g id="labels"></g>
+        <g class="mast" id="mast">
+          <line x1="330" y1="292" x2="330" y2="214" stroke="#56524a" stroke-width="4"/>
+          <rect class="mast-h" x="300" y="166" width="60" height="50" rx="4"/>
+          <circle class="mast-l" cx="330" cy="191" r="12"/>
+          <text class="svgtxt" x="330" y="156" text-anchor="middle">JEV</text>
+        </g>
+        <text class="svgtxt" x="20" y="262">STATE →</text>
+        <text class="svgtxt" x="380" y="350" text-anchor="middle" style="font-size:12px">M-00</text>
+        <g id="wagon" transform="translate(-80 300)">
+          <rect class="wag-b" x="-50" y="-17" width="100" height="34" rx="3"/>
+          <text class="wag-t" id="wagT" x="0" y="5" text-anchor="middle">SUP-2051</text>
+        </g>
+      </svg>
+      <figcaption id="yardCap" aria-live="off">Şekil 00 — Vagon makasa varmadan karar verilmiştir. Dört ray, dört seçenek; beşinci ray yok.</figcaption>
+    </figure>
+  </div>
+  <aside class="anons" data-r style="--d:4" aria-label="Klasik LLM karşılaştırması"><b>Anons kaydı · klasik LLM olsaydı</b>İstasyon anonsu gibi olurdu: uzun, insan için anlaşılır, ama makinistin her seferinde yorumlaması gereken bir cümle. JEV ise anons okumaz, makası çevirir.</aside>
+</section>
+
+<!-- 01 · ANONS ↔ MAKAS -->
+<section class="scene" id="s1" data-name="Anons" aria-labelledby="h1x">
+  <p class="plate" data-r>Makas 01 · Anons ↔ Makas</p>
+  <h2 id="h1x" data-r style="--d:1">Aynı talep. <em>İki tür cevap.</em></h2>
+  <p class="lede" data-r style="--d:2">Klasik LLM'e “bu talep hangi ekibe gitmeli?” diye sorarsınız; bir cümle duyarsınız. JEV'e aynı soruyu tipli sorarsınız; bir değer okursunuz.</p>
+  <div class="duel" data-r style="--d:3">
+    <div class="stub"><span>SUP-2051</span> Mobil uygulamada ödeme ekranı açılmıyor <em>“Ödeme butonuna bastığımda ekran kapanıyor. Web sitesinde aynı kartla ödeme yapabiliyorum.”</em></div>
+    <div class="lane lane-llm">
+      <header><i class="ico"></i>Anons · klasik LLM</header>
+      <div class="speech"><span id="llmText"></span><i class="caret" aria-hidden="true"></i></div>
+      <div class="parse">
+        <code>parse(cevap) → department</code>
+        <output id="llmOut">…</output>
+        <span class="why" id="llmWhy"></span>
+      </div>
+    </div>
+    <div class="lane lane-jev">
+      <header><i class="ico"></i>Makas · JEV</header>
+      <pre class="json" id="jevOut" data-label="answers"></pre>
+      <div class="parse">
+        <code>answers.department.choice</code>
+        <output class="ok" id="jevRead">"technical" ✓</output>
+        <span class="why">Ayrıştırma yok. Kod doğrudan dallanır: <code>route(choice)</code></span>
+      </div>
+    </div>
+  </div>
+  <div class="duel-ctl" data-r style="--d:4">
+    <button class="btn" id="askAgain" type="button">↻ Aynı soruyu tekrar sor</button>
+    <span class="tally" aria-live="polite">Deneme <b id="tryNo">0</b> · Ayrıştırma kuralı gereken: <b id="nRule">0</b> · Kuralsız okunan: <b id="nOk">0</b></span>
+  </div>
+  <p class="fine" data-r style="--d:5">Soldaki üç cevap temsilîdir; aynı içeriğin farklı biçimlerde gelebileceğini göstermek için yazıldı. Klasik LLM'ler JSON modu veya şemayla da zorlanabilir — o durumda doğrulama katmanını kurmak sizin işinizdir. Sağdaki biçim her denemede aynıdır; değerler modele göre değişebilir.</p>
+</section>
+
+<!-- 02 · VAGON / STATE -->
+<section class="scene" id="s2" data-name="Vagon" aria-labelledby="h2x">
+  <p class="plate" data-r>Makas 02 · Vagon</p>
+  <h2 id="h2x" data-r style="--d:1">State: <em>kararın yükü.</em></h2>
+  <p class="lede" data-r style="--d:2"><code>state</code>, JEV'in hakkında karar vereceği bağlamdır: bir mesaj, bir destek kaydı, bir sipariş. Kule üç tür vagon kabul eder.</p>
+  <div class="train" role="tablist" aria-label="State biçimleri" data-r style="--d:3">
+    <button class="car" role="tab" type="button" aria-selected="true" aria-controls="manifest" data-k="text">Düz metin<small>tek cümlelik olay</small></button>
+    <button class="car" role="tab" type="button" aria-selected="false" aria-controls="manifest" data-k="json"><i class="cp"></i>JSON nesnesi<small>alanlar açık</small></button>
+    <button class="car" role="tab" type="button" aria-selected="false" aria-controls="manifest" data-k="list"><i class="cp"></i>Metin dizisi<small>ilişkili kayıtlar</small></button>
+    <span class="car-x" aria-label="Kabul edilmeyen biçimler"><s>Görüntü · ses · video</s> → önce metne çevir</span>
+  </div>
+  <div class="state-grid">
+    <div data-r style="--d:4">
+      <pre class="json" id="manifest" role="tabpanel" data-label="yük manifestosu · state"></pre>
+      <p class="mnote" id="mnote"></p>
+    </div>
+    <div class="placard" data-r style="--d:5">
+      <h3>Yükleme talimatı</h3>
+      <ol>
+        <li>Karar için gereken bilgiyi gönder; fazlasını değil.</li>
+        <li>Hassas veya gereksiz veriyi vagona koyma.</li>
+        <li>Tarih, tutar, durum, kimlik: ayrı ve açık alanlarda.</li>
+        <li>Kullanıcının metnini anlamını bozarak yeniden yazma.</li>
+        <li>Alan adları kendini anlatsın.</li>
+        <li>Görsel, ses, video → önce metinsel özet.</li>
+        <li>Türkçe veride kalibrasyonu gerçek örneklerle test et.</li>
+      </ol>
+    </div>
+  </div>
+  <aside class="anons" data-r style="--d:6" aria-label="Klasik LLM karşılaştırması"><b>Anons kaydı · klasik LLM olsaydı</b>Düz metinle de iş görürdü: <q>Sipariş numarası ORD-9921 olan müşterinin ürünü gecikmiştir…</q> Ama klasik LLM'e JSON gönderseniz bile cevap yine metin olabilir. JEV'de bağlamın yanında cevabın tipi de ayrıca tanımlanır.</aside>
+</section>
+
+<!-- 03 · MAKAS / QUESTIONS -->
+<section class="scene" id="s3" data-name="Makas" aria-labelledby="h3x">
+  <p class="plate" data-r>Makas 03 · Soru</p>
+  <h2 id="h3x" data-r style="--d:1">Her soru <em>bir makas.</em></h2>
+  <p class="lede" data-r style="--d:2"><code>questions</code>, JEV'e hangi kararı istediğinizi söyler. Her sorunun bir adı, tipi, talimatı ve — gerekiyorsa — rayları vardır. Numaraların üzerine gelin.</p>
+  <div class="q-grid">
+    <pre class="json anno" id="anno" data-label="questions" data-r style="--d:3">{
+  <span class="c" data-c="1"><span class="k">"department"</span></span>: {
+    <span class="c" data-c="2"><span class="k">"type"</span>: <span class="s">"choice"</span></span>,
+    <span class="c" data-c="3"><span class="k">"instructions"</span>: <span class="s">"Bu destek talebi hangi ekip tarafından ele alınmalı?"</span></span>,
+    <span class="c" data-c="4"><span class="k">"criteria"</span>: {
+      <span class="k">"billing"</span>: <span class="s">"Ödeme, fatura, ücret veya iade sorunları"</span>,
+      <span class="k">"technical"</span>: <span class="s">"Uygulama hataları, çökmeler veya teknik çalışma problemleri"</span>,
+      <span class="k">"account"</span>: <span class="s">"Giriş, üyelik, parola veya hesap erişimi sorunları"</span>,
+      <span class="c" data-c="5"><span class="k">"other"</span>: <span class="s">"Bu ekiplerden hiçbirine açıkça uymayan talepler"</span></span>
+    }</span>
+  }
+}</pre>
+    <div data-r style="--d:4">
+      <ol class="callouts" id="callouts">
+        <li data-c="1" tabindex="0"><span><b>Ad</b>Sizin seçtiğiniz kimlik. Cevap aynı adla döner: <code>answers.department</code>.</span></li>
+        <li data-c="2" tabindex="0"><span><b>Tip</b><code>choice</code> | <code>score</code> | <code>noul</code> — cevabın şekli burada sabitlenir.</span></li>
+        <li data-c="3" tabindex="0"><span><b>Talimat</b>Tek ve açık bir karar sorusu. Tek makas, tek karar.</span></li>
+        <li data-c="4" tabindex="0"><span><b>Kriterler</b>Raylar. Seçenekler istekten önce tanımlanır; model bunların dışına çıkamaz.</span></li>
+        <li data-c="5" tabindex="0"><span><b>Kaçış rayı</b><code>other</code> / <code>unknown</code>: her vagon önceden çizilmiş bir raya uymaz.</span></li>
+      </ol>
+      <div class="qq">
+        <div>
+          <h3>Tek makas</h3>
+          <ul>
+            <li>Hangi ekibe ait? <code>choice</code></li>
+            <li>Ne kadar acil? <code>score</code></li>
+            <li>İnsan görmeli mi? <code>noul</code></li>
+          </ul>
+        </div>
+        <div class="qq-bad">
+          <h3>Raydan çıkış</h3>
+          <p><s>“Bu mesajı analiz et ve ne yapılması gerektiğini söyle.”</s></p>
+          <svg class="derail" viewBox="0 0 200 34" aria-hidden="true"><path d="M0 17 H90 C110 17 112 4 126 8 S140 30 152 24 S168 2 178 14 S192 30 200 26" fill="none" stroke="#ff4b3e" stroke-width="2" stroke-dasharray="4 4"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="anons" data-r style="--d:5" aria-label="Klasik LLM karşılaştırması"><b>Anons kaydı · klasik LLM olsaydı</b>Geniş bir doğal dil komutu verilirdi. Prototipte hızlıdır; ama “ne yapılmalı?” o kadar geniştir ki model bazen sınıf, bazen özet, bazen öneri döndürür. JEV'de soru adı ve tipi bu belirsizliği daraltır.</aside>
+</section>
+
+<!-- 04 · KOLLAR -->
+<section class="scene" id="s4" data-name="Kollar" aria-labelledby="h4x">
+  <p class="plate" data-r>Makas 04 · Kol sırası</p>
+  <h2 id="h4x" data-r style="--d:1">Üç kol. <em>Üç cevap biçimi.</em></h2>
+  <p class="lede" data-r style="--d:2">Kulede yalnızca üç kol var. Hangisini çekerseniz cevap o şekilde gelir — sayı, seçenek ya da sıralı puan.</p>
+  <div class="lv-grid">
+    <div class="frame" role="tablist" aria-label="Cevap tipleri" id="frame" data-r style="--d:3">
+      <button class="lever" role="tab" type="button" aria-selected="true" data-t="noul"><span class="rod"><span class="knob"></span></span><span class="ln">noul</span><span class="ls">evet mi, hayır mı?</span></button>
+      <button class="lever" role="tab" type="button" aria-selected="false" data-t="choice"><span class="rod"><span class="knob"></span></span><span class="ln">choice</span><span class="ls">hangi ray?</span></button>
+      <button class="lever" role="tab" type="button" aria-selected="false" data-t="score"><span class="rod"><span class="knob"></span></span><span class="ln">score</span><span class="ls">hangi seviye?</span></button>
+    </div>
+    <div data-r style="--d:4">
+      <div class="ph"><span class="pt" id="lvType">noul</span><span class="pn" id="lvName"></span><span class="pa" id="lvAsk"></span></div>
+      <div class="gauge" id="lvGauge" aria-live="polite"></div>
+      <pre class="rule" id="lvRule"></pre>
+      <p class="fine" id="lvNote"></p>
+    </div>
+    <div data-r style="--d:5">
+      <div class="jt" role="tablist" aria-label="JSON görünümü" id="jt">
+        <button role="tab" type="button" aria-selected="false" data-j="q">Soru</button>
+        <button role="tab" type="button" aria-selected="false" data-j="s">State</button>
+        <button role="tab" type="button" aria-selected="true" data-j="a">Cevap</button>
+      </div>
+      <pre class="json" id="lvJson" role="tabpanel"></pre>
+    </div>
+  </div>
+  <aside class="anons" id="lvLlm" data-r style="--d:6" aria-label="Klasik LLM karşılaştırması"></aside>
+</section>
+
+<!-- 05 · TEK SEFER -->
+<section class="scene" id="s5" data-name="Tek sefer" aria-labelledby="h5x">
+  <p class="plate" data-r>Makas 05 · Tek sefer</p>
+  <h2 id="h5x" data-r style="--d:1">Tek istek, <em>üç makas.</em></h2>
+  <p class="lede" data-r style="--d:2">Aynı <code>state</code> üzerinde birden fazla soru tek seferde sorulur. Sorular aynı yükü görür ama birbirinin cevabını görmez — raylar kesişmez.</p>
+  <div class="multi">
+    <pre class="json" id="multiReq" data-label="istek · model + state + questions" data-r style="--d:3"></pre>
+    <div data-r style="--d:4">
+      <div class="fan" id="fan">
+        <div class="fan-wag">SUP-2051<small>tek state</small></div>
+        <i class="fan-ln" style="grid-row:1"></i>
+        <div class="fan-out" style="grid-row:1"><span class="ft">choice · department</span><output id="o1">—</output><small id="o1s">&nbsp;</small></div>
+        <i class="fan-ln" style="grid-row:2"></i>
+        <div class="fan-out" style="grid-row:2"><span class="ft">score · urgency</span><output id="o2">—</output><small id="o2s">&nbsp;</small></div>
+        <i class="fan-ln" style="grid-row:3"></i>
+        <div class="fan-out" style="grid-row:3"><span class="ft">noul · needs_human</span><output id="o3">—</output><small id="o3s">&nbsp;</small></div>
+      </div>
+      <pre class="rule" id="rules"><span>department = technical  → Teknik destek kuyruğuna gönder</span><span>urgency &gt;= 1.5          → Öncelikli işaretle</span><span>needs_human &gt;= 0.90     → İnsan temsilciye ata</span></pre>
+      <p class="tokens">usage · input <b id="tIn">0</b> · output <b id="tOut">0</b> token</p>
+      <button class="btn" id="send" type="button">İsteği gönder ▸</button>
+      <details class="raw"><summary>Ham cevabı göster</summary><pre class="json" id="multiRes" data-label="cevap"></pre></details>
+      <p class="fine">Cevap ve <code>usage</code> değerleri sunum notlarındaki örnekten alınmıştır; canlı çağrıda farklı olabilir.</p>
+    </div>
+  </div>
+  <aside class="anons" data-r style="--d:5" aria-label="Klasik LLM karşılaştırması"><b>Anons kaydı · klasik LLM olsaydı</b>Tek cümle gelirdi: <q>Bu talep teknik ekibe yönlendirilmeli, yüksek öncelikli değerlendirilmeli ve insan temsilci tarafından incelenmelidir.</q> İnsan için iyi; ama üç sonucu kodda kullanmak için ek bir JSON üretim, doğrulama veya ayrıştırma katmanı gerekir.</aside>
+</section>
+
+<!-- 06 · KAPI -->
+<section class="scene" id="s6" data-name="Kapı" aria-labelledby="h6x">
+  <p class="plate" data-r>Makas 06 · Güvenlik kapısı</p>
+  <h2 id="h6x" data-r style="--d:1">Olasılık sinyaldir, <em>hüküm değil.</em></h2>
+  <p class="lede" data-r style="--d:2">Bir yapay zekâ ajanı müşteriye 1299 TL iade etmek üzere; politika sınırı 500 TL. JEV parayı göndermez — yalnızca kapıya sinyal verir. Son sözü iş kuralı ve gerekirse insan söyler.</p>
+  <div class="gate">
+    <pre class="json" id="refund" data-label="ajan · iade öncesi kontrol" data-r style="--d:3"></pre>
+    <div class="sigbox" data-r style="--d:4">
+      <div class="mast2" aria-hidden="true"><i class="g" id="lg"></i><i class="a" id="la"></i><i class="r" id="lr"></i></div>
+      <div>
+        <p class="verdict-out r" id="vOut" aria-live="polite">İnsan onayı</p>
+        <p class="vwhy" id="vWhy"></p>
+        <label class="ctl">safe_to_execute · noul <output id="pv">0.12</output>
+          <input type="range" id="pr" min="0" max="1" step="0.01" value="0.12" aria-describedby="pvNote">
+        </label>
+        <div class="seg2" role="radiogroup" aria-label="İşlem riski" id="risk">
+          <button role="radio" type="button" aria-checked="false" data-r2="low">Düşük risk</button>
+          <button role="radio" type="button" aria-checked="true" data-r2="high">Yüksek risk · para iadesi</button>
+        </div>
+        <pre class="rule rule2" id="gRule"><span>if (risk === "high")    → insan onayı</span><span>else if (noul &gt;= 0.90) → otomatik devam</span><span>else if (noul &gt;= 0.60) → inceleme kuyruğu</span><span>else                    → insan onayı</span></pre>
+        <p class="fine" id="pvNote">Başlangıç değeri 0.12 varsayımsaldır. 0.60 / 0.90 örnek eşiklerdir — kendi verinizle belirleyin.</p>
+      </div>
+    </div>
+  </div>
+  <p class="careful" data-r style="--d:5"><strong>Korumacı ol</strong>Ödeme · para iadesi · hesap silme · yetki değiştirme · güvenlik işlemleri · sağlık veya hukuki sonuç doğuran işlemler. “Type-safe” cevabın biçimini güvenceye alır; modelin her kararda haklı olacağını değil.</p>
+  <aside class="anons" data-r style="--d:6" aria-label="Klasik LLM karşılaştırması"><b>Anons kaydı · klasik LLM olsaydı</b>“Cevabından ne kadar eminsin?” diye ayrıca sorulurdu; gelen güven değeri çoğu zaman modelin kendi yazdığı metnin içindeki bir tahmindir. JEV'de olasılık cevabın parçasıdır. Yine de iki sistemde de gerçek veriyle test, eşik ve insan denetimi şarttır.</aside>
+</section>
+
+<!-- 07 · HAT -->
+<section class="scene" id="s7" data-name="Hat" aria-labelledby="h7x">
+  <p class="plate" data-r>Makas 07 · Ortak hat</p>
+  <h2 id="h7x" data-r style="--d:1">JEV karar verir. <em>LLM konuşur.</em></h2>
+  <p class="lede" data-r style="--d:2">En verimli mimari çoğu zaman birini seçmek değil, işi bölmektir: karar kulede, cümle istasyonda.</p>
+  <div class="line" data-r style="--d:3" role="img" aria-label="Akış: kullanıcı mesajı, JEV kararı, iş kuralı, klasik LLM cevap metni, kullanıcı.">
+    <i class="st" style="left:0"><span><b>Mesaj</b>kullanıcıdan</span></i>
+    <i class="st j" style="left:25%"><span><b>JEV</b>kategori · risk · aciliyet</span></i>
+    <i class="st" style="left:50%"><span><b>İş kuralı</b>eşik ve rota</span></i>
+    <i class="st l" style="left:75%"><span><b>Klasik LLM</b>gerekiyorsa cevap metni</span></i>
+    <i class="st end" style="left:100%"><span><b>Kullanıcı</b>doğal bir yanıt</span></i>
+    <i class="mover" aria-hidden="true"></i>
+  </div>
+  <div class="dispatch" data-r style="--d:4">
+    <div>
+      <span class="dq-no" id="dqNo">Vagon 1 / 8 · hangi hatta?</span>
+      <p class="dq-task" id="dqTask">…</p>
+    </div>
+    <div>
+      <div class="dq-btns" id="dqBtns">
+        <button class="btn ghost" type="button" data-to="jev">◂ JEV hattı</button>
+        <button class="btn ghost" type="button" data-to="llm">LLM hattı ▸</button>
+      </div>
+      <p class="dq-score" style="margin-top:10px">Doğru: <b id="dqOk">0</b> / <b id="dqAll">0</b></p>
+    </div>
+    <p class="dq-fb" id="dqFb" aria-live="polite"></p>
+  </div>
+  <aside class="anons" data-r style="--d:5" aria-label="Klasik LLM karşılaştırması"><b>Anons kaydı · klasik LLM olsaydı</b>Her şeyi tek modele yaptırmak ilk bakışta kolaydır: aynı model hem karar verir, hem güvenlik kontrolü yapar, hem rota seçer, hem metin yazar. Görevler ayrılmadığında test etmek ve hangi aşamanın hata yaptığını bulmak zorlaşır.</aside>
+</section>
+
+<!-- 08 · SON SİNYAL -->
+<section class="scene" id="s8" data-name="Son sinyal" aria-labelledby="h8x">
+  <p class="plate" data-r>Makas 08 · Son sinyal</p>
+  <h2 class="verdict" id="h8x" data-r style="--d:1"><span class="v1">LLM sorar: “Ne söylemeliyim?”</span><span class="v2">JEV sorar: “Yazılım hangi kararı vermeli?”</span></h2>
+  <div class="close-grid">
+    <div data-r style="--d:2">
+      <p class="lede">JEV, klasik LLM'lerin yerine geçen genel amaçlı bir chatbot değildir. Daha dar ama önemli bir problemi çözer: uygulamanın tekrar tekrar vermesi gereken kararları yapılandırılmış biçimde üretmek.</p>
+      <pre class="rule">JEV        → karar · sınıflandırma · puanlama · güvenlik kapısı
+Klasik LLM → açıklama · yazı · kod · açık uçlu muhakeme</pre>
+      <details class="tarife" style="margin-top:18px">
+        <summary>Tam tarife · JEV ↔ klasik LLM</summary>
+        <table>
+          <thead><tr><th scope="col">Konu</th><th scope="col">JEV</th><th scope="col">Klasik LLM</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Ana amaç</th><td>Karar vermek</td><td>Metin üretmek, muhakeme</td></tr>
+            <tr><th scope="row">Çıktı</th><td>choice · score · noul</td><td>Serbest metin, kod, özet</td></tr>
+            <tr><th scope="row">Cevap alanı</th><td>Önceden tanımlı</td><td>Açık uçlu</td></tr>
+            <tr><th scope="row">Uygulamaya bağlama</th><td>Doğrudan branching / routing</td><td>Çoğu zaman ayrıştırma + doğrulama</td></tr>
+            <tr><th scope="row">Belirsizlik</th><td>Olasılık, bazı tiplerde confidence</td><td>Ayrıca istenebilir; her zaman güvenilir değil</td></tr>
+            <tr><th scope="row">Hız ve maliyet</th><td>Karar görevlerine optimize</td><td>Görev ve token sayısına bağlı</td></tr>
+            <tr><th scope="row">Esneklik</th><td>Daha sınırlı</td><td>Çok yüksek</td></tr>
+            <tr><th scope="row">Uzun yazı · kod</th><td>Uygun değil</td><td>Uygun</td></tr>
+            <tr><th scope="row">Routing / sınıflandırma</th><td>Çok uygun</td><td>Yapabilir; parsing gerekebilir</td></tr>
+            <tr><th scope="row">İnsan denetimi</th><td>Eşik + olasılıkla workflow'a bağlanır</td><td>Çıktı değerlendirmesi gerekir</td></tr>
+          </tbody>
+        </table>
+      </details>
+    </div>
+    <div data-r style="--d:3">
+      <h3 style="margin-bottom:8px">Kaynaklar</h3>
+      <ul class="src">
+        <li><a href="https://typesafe.ai/blog/introducing-system-one-models-and-jev" target="_blank" rel="noopener">TypeSafe — Introducing System One Models &amp; Jev</a></li>
+        <li><a href="https://typesafe.ai/" target="_blank" rel="noopener">TypeSafe ana sayfa</a></li>
+        <li><a href="https://api.typesafe.ai/docs" target="_blank" rel="noopener">TypeSafe API dokümantasyonu</a></li>
+        <li><a href="https://api.typesafe.ai/openapi.json" target="_blank" rel="noopener">TypeSafe OpenAPI şeması</a></li>
+        <li><a href="https://github.com/jev-ai/jev-api" target="_blank" rel="noopener">Jev AI geliştirici rehberi</a></li>
+      </ul>
+      <p class="fine">Model adları, fiyatlar, erişim yöntemleri ve API limitleri erken erişim döneminde değişebilir. Canlı demodan önce model adını ve API sözleşmesini resmî dokümantasyondan kontrol edin.</p>
+      <p style="margin-top:18px"><button class="btn ghost" type="button" id="toTop">↑ Kuleye dön</button></p>
+      <p class="colophon">Tasarım notu — Raylı sunum formu seçildi: JEV bir karar katmanı olduğu için sayfa bir makas kulesi olarak kuruldu; her durak tek bir makası anlatır. Klasik LLM her sahnede yalnızca “anons kaydı” olarak, dip notta konuşur.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<script>
+(() => {
+"use strict";
+document.documentElement.classList.add("js");
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const sleep = ms => new Promise(r => setTimeout(r, reduce ? 0 : ms));
+
+/* ---------- JSON örnekleri (sunum notlarından, birebir) ---------- */
+const J = {
+stateText:`{
+  "state": "Müşteri aynı sipariş için iki kez ücret çekildiğini ve para iadesi istediğini söylüyor."
+}`,
+stateJson:`{
+  "state": {
+    "order_id": "ORD-9921",
+    "customer_message": "Ürün üç haftadır gelmedi, paramı geri istiyorum.",
+    "order_status": "shipped",
+    "estimated_delivery": "2026-09-17",
+    "today": "2026-10-13",
+    "customer_tier": "gold",
+    "previous_contacts": 3
+  }
+}`,
+stateList:`{
+  "state": [
+    "Müşteri mesajı: Hesabım kapatıldı ve giriş yapamıyorum.",
+    "Son destek görüşmesi: Kimlik doğrulama belgesi eksik.",
+    "Hesap durumu: Güvenlik incelemesi bekleniyor."
+  ]
+}`,
+duel:`{
+  "department": {
+    "type": "choice",
+    "choice": "technical",
+    "confidence": 0.94,
+    "probabilities": {
+      "billing": 0.04,
+      "technical": 0.94,
+      "account": 0.01,
+      "other": 0.01
+    }
+  }
+}`,
+noulQ:`{
+  "needs_human": {
+    "type": "noul",
+    "instructions": "Bu müşteri talebi insan temsilci tarafından hemen incelenmeli mi?",
+    "criteria": {
+      "true": "Çift ücret, hukuki tehdit, yüksek tutar veya tekrarlanan başarısız iletişim varsa insan incelemesi gerekir.",
+      "false": "Basit, düşük riskli ve otomatik olarak çözülebilecek bir müşteri sorusudur."
+    }
+  }
+}`,
+noulS:`{
+  "state": {
+    "ticket_id": "SUP-1842",
+    "customer": {
+      "plan": "premium"
+    },
+    "message": "Hesabımdan iki kez ücret çekildi. Param bugün geri yatmazsa hukuki işlem başlatacağım.",
+    "order_amount": 1299,
+    "previous_contact_count": 2
+  }
+}`,
+noulA:`{
+  "answers": {
+    "needs_human": {
+      "type": "noul",
+      "noul": 0.98
+    }
+  }
+}`,
+choiceQ:`{
+  "department": {
+    "type": "choice",
+    "instructions": "Bu destek talebi hangi ekip tarafından ele alınmalı?",
+    "criteria": {
+      "billing": "Ödeme, fatura, ücret veya iade sorunları",
+      "technical": "Uygulama hataları, çökmeler veya teknik çalışma problemleri",
+      "account": "Giriş, üyelik, parola veya hesap erişimi sorunları",
+      "other": "Bu ekiplerden hiçbirine açıkça uymayan talepler"
+    }
+  }
+}`,
+choiceS:`{
+  "state": {
+    "ticket_id": "SUP-2051",
+    "subject": "Mobil uygulamada ödeme ekranı açılmıyor",
+    "message": "Kart bilgilerimi giriyorum fakat ödeme butonuna bastığımda ekran kapanıyor. Web sitesinde aynı kartla ödeme yapabiliyorum.",
+    "app_version": "5.4.1",
+    "device": "iPhone 15",
+    "recent_deploy": true
+  }
+}`,
+choiceA:`{
+  "answers": {
+    "department": {
+      "type": "choice",
+      "choice": "technical",
+      "confidence": 0.94,
+      "probabilities": {
+        "billing": 0.04,
+        "technical": 0.94,
+        "account": 0.01,
+        "other": 0.01
+      }
+    }
+  }
+}`,
+scoreQ:`{
+  "urgency": {
+    "type": "score",
+    "instructions": "Bu olayın operasyonel aciliyetini değerlendir.",
+    "criteria": [
+      "Rutin: Kullanıcı etkisi yok veya işlem mesai içinde bekleyebilir.",
+      "Orta: Sınırlı kullanıcı etkisi var ve bugün içinde müdahale edilmeli.",
+      "Yüksek: Çok sayıda kullanıcı etkileniyor, ödeme veya kritik özellik çalışmıyor; hemen müdahale edilmeli."
+    ]
+  }
+}`,
+scoreS:`{
+  "state": {
+    "incident_id": "INC-778",
+    "service": "production-api",
+    "affected_users": 12000,
+    "error_rate": 0.42,
+    "message": "Üretim API'sinde isteklerin yüzde 42'si 500 hatası dönüyor.",
+    "payment_operations_affected": true,
+    "workaround_available": false
+  }
+}`,
+scoreA:`{
+  "answers": {
+    "urgency": {
+      "type": "score",
+      "score": 1.92,
+      "confidence": 0.97,
+      "legend": {
+        "0": "Rutin",
+        "1": "Orta",
+        "2": "Yüksek"
+      },
+      "probabilities": {
+        "0": 0.01,
+        "1": 0.06,
+        "2": 0.93
+      }
+    }
+  }
+}`,
+multiReq:`{
+  "model": "jev-latest",
+  "state": {
+    "ticket_id": "SUP-2051",
+    "subject": "Mobil uygulamada ödeme ekranı açılmıyor",
+    "message": "Kart bilgilerimi giriyorum fakat ödeme butonuna bastığımda ekran kapanıyor.",
+    "customer_plan": "premium",
+    "previous_attempts": 2
+  },
+  "questions": {
+    "department": {
+      "type": "choice",
+      "instructions": "Bu talep hangi ekip tarafından ele alınmalı?",
+      "criteria": {
+        "billing": "Ödeme, fatura veya iade sorunları",
+        "technical": "Teknik hata veya uygulama sorunu",
+        "account": "Hesap erişimi sorunu",
+        "other": "Diğer talepler"
+      }
+    },
+    "urgency": {
+      "type": "score",
+      "instructions": "Bu talebin aciliyetini değerlendir.",
+      "criteria": [
+        "Düşük: Kullanıcı bekleyebilir.",
+        "Orta: Aynı gün içinde ilgilenilmeli.",
+        "Yüksek: Hemen müdahale edilmeli."
+      ]
+    },
+    "needs_human": {
+      "type": "noul",
+      "instructions": "Bu talep insan destek temsilcisine aktarılmalı mı?",
+      "criteria": {
+        "true": "Kullanıcı iki veya daha fazla kez başarısız olmuşsa veya ödeme tamamen engelleniyorsa.",
+        "false": "Otomatik yanıt veya yardım makalesi yeterliyse."
+      }
+    }
+  }
+}`,
+multiRes:`{
+  "model": "jev-1.13.0",
+  "answers": {
+    "department": {
+      "type": "choice",
+      "choice": "technical",
+      "confidence": 0.95,
+      "probabilities": {
+        "billing": 0.22,
+        "technical": 0.73,
+        "account": 0.03,
+        "other": 0.02
+      }
+    },
+    "urgency": {
+      "type": "score",
+      "score": 1.62,
+      "confidence": 0.88,
+      "legend": {
+        "0": "Düşük",
+        "1": "Orta",
+        "2": "Yüksek"
+      },
+      "probabilities": {
+        "0": 0.04,
+        "1": 0.30,
+        "2": 0.66
+      }
+    },
+    "needs_human": {
+      "type": "noul",
+      "noul": 0.91
+    }
+  },
+  "usage": {
+    "input_tokens": 310,
+    "output_tokens": 35
+  }
+}`,
+refund:`{
+  "state": {
+    "requested_action": "Müşteriye 1299 TL iade yap",
+    "customer_message": "Ürün gelmedi, ücretimi geri istiyorum.",
+    "refund_amount": 1299,
+    "order_status": "shipped",
+    "refund_policy_limit": 500
+  },
+  "questions": {
+    "safe_to_execute": {
+      "type": "noul",
+      "instructions": "Bu iade işlemi ek insan onayı olmadan güvenli biçimde çalıştırılabilir mi?",
+      "criteria": {
+        "true": "İşlem şirket politikası sınırları içinde ve riskli bir istisna içermiyor.",
+        "false": "Tutar politika sınırını aşıyor veya işlem insan onayı gerektiren bir istisna içeriyor."
+      }
+    }
+  }
+}`
+};
+
+function hl(src, keys = []) {
+  const esc = src.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return esc.replace(/("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g, m => {
+    if (m[0] === '"') {
+      if (/:$/.test(m)) {
+        const k = m.slice(1, m.lastIndexOf('"'));
+        return `<span class="k${keys.includes(k) ? " hl" : ""}">${m.slice(0, -1)}</span>:`;
+      }
+      return `<span class="s">${m}</span>`;
+    }
+    if (m === "true" || m === "false") return `<span class="b">${m}</span>`;
+    if (m === "null") return `<span class="u">${m}</span>`;
+    return `<span class="n">${m}</span>`;
+  });
+}
+const setJson = (el, src, keys) => { el.innerHTML = hl(src, keys); };
+const flash = el => { el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); };
+
+function count(el, to, dur = 900, dec = 0) {
+  if (reduce) { el.textContent = to.toFixed(dec); return; }
+  const t0 = performance.now();
+  const step = now => {
+    const x = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - x, 3);
+    el.textContent = (to * e).toFixed(dec);
+    if (x < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function tabs(list, sel, onSel) {
+  const items = $$(sel, list);
+  const attr = b => b.getAttribute("role") === "radio" ? "aria-checked" : "aria-selected";
+  const pick = (b, focus) => {
+    items.forEach(x => { const on = x === b; x.setAttribute(attr(x), on); x.tabIndex = on ? 0 : -1; });
+    if (focus) b.focus();
+    onSel(b);
+  };
+  items.forEach((b, i) => {
+    b.addEventListener("click", () => pick(b));
+    b.addEventListener("keydown", e => {
+      let j = null;
+      if (e.key === "ArrowRight") j = (i + 1) % items.length;
+      if (e.key === "ArrowLeft") j = (i - 1 + items.length) % items.length;
+      if (j !== null) { e.preventDefault(); pick(items[j], true); }
+    });
+  });
+  pick(items.find(x => x.getAttribute(attr(x)) === "true") || items[0]);
+}
+
+/* ---------- Sahne gözlemcileri, ray, klavye ---------- */
+const scenes = $$(".scene");
+const links = $$(".rail a");
+const onSeen = {};
+let cur = 0;
+
+const rail = $(".rail");
+const onVisible = [];
+let active = -1, ticking = false;
+function check() {
+  ticking = false;
+  const vh = innerHeight, h = document.documentElement.scrollHeight - vh;
+  rail.style.setProperty("--p", h > 0 ? (scrollY / h).toFixed(4) : 0);
+  scenes.forEach((s, i) => {
+    const r = s.getBoundingClientRect();
+    if (!s.classList.contains("seen") && r.top < vh * .85 && r.bottom > vh * .15) {
+      s.classList.add("seen"); onSeen[s.id] && onSeen[s.id]();
+    }
+    if (r.top <= vh / 2 && r.bottom > vh / 2) cur = i;
+  });
+  if (cur !== active) {
+    active = cur;
+    links.forEach((a, i) => i === cur ? a.setAttribute("aria-current", "step") : a.removeAttribute("aria-current"));
+    $("#hudNo").textContent = String(cur).padStart(2, "0");
+    $("#hudName").textContent = scenes[cur].dataset.name;
+  }
+  onVisible.forEach(f => f());
+}
+const schedule = () => { if (!ticking) { ticking = true; requestAnimationFrame(check); } };
+addEventListener("scroll", schedule, { passive: true });
+addEventListener("resize", schedule);
+
+const go = i => {
+  i = Math.max(0, Math.min(scenes.length - 1, i));
+  scenes[i].scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+};
+links.forEach(a => a.addEventListener("click", e => { e.preventDefault(); go(+a.dataset.i); }));
+$("#toTop").addEventListener("click", () => go(0));
+
+document.addEventListener("keydown", e => {
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  const t = e.target;
+  const k = e.key;
+  if (t.closest && t.closest("input,textarea,select")) return;
+  if (t.closest && t.closest("[role=tablist],[role=radiogroup]") && (k === "ArrowLeft" || k === "ArrowRight")) return;
+  const onCtl = t.closest && t.closest("button,a,summary");
+  if (k === "ArrowDown" || k === "PageDown" || k === "ArrowRight" || (k === " " && !onCtl && !e.shiftKey)) { e.preventDefault(); go(cur + 1); }
+  else if (k === "ArrowUp" || k === "PageUp" || k === "ArrowLeft" || (k === " " && !onCtl && e.shiftKey)) { e.preventDefault(); go(cur - 1); }
+  else if (k === "Home") { e.preventDefault(); go(0); }
+  else if (k === "End") { e.preventDefault(); go(scenes.length - 1); }
+  else if (/^[0-8]$/.test(k)) go(+k);
+  else if (k === "f" || k === "F") {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else document.documentElement.requestFullscreen?.().catch(() => {});
+  }
+});
+
+/* ---------- 00 · Makas sahası ---------- */
+const NS = "http://www.w3.org/2000/svg";
+const tracks = { billing: 110, technical: 240, account: 360, other: 490 };
+const mk = (tag, attrs, parent) => { const el = document.createElementNS(NS, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); parent && parent.appendChild(el); return el; };
+const beds = $("#beds"), outers = $("#outers"), inners = $("#inners"), labels = $("#labels");
+const entry = "M-120 300 L380 300";
+[entry].forEach(d => { mk("path", { d, class: "bed" }, beds); mk("path", { d, class: "ro" }, outers); mk("path", { d, class: "ri" }, inners); });
+const Y = {};
+for (const [k, y] of Object.entries(tracks)) {
+  const d = `M380 300 C520 300 560 ${y} 700 ${y} L960 ${y}`;
+  mk("path", { d, class: "bed" }, beds);
+  Y[k] = {
+    ro: mk("path", { d, class: "ro" }, outers),
+    route: mk("path", { d: `M-120 300 L380 300 C520 300 560 ${y} 700 ${y} L960 ${y}`, fill: "none", stroke: "none" }, labels),
+    tl: mk("text", { x: 720, y: y - 22, class: "tl" }, labels),
+    lp: mk("circle", { cx: 978, cy: y, r: 10, class: "lp" }, labels)
+  };
+  mk("path", { d, class: "ri" }, inners);
+  Y[k].tl.textContent = `"${k}"`;
+}
+const wagon = $("#wagon"), wagT = $("#wagT"), mast = $("#mast"), cap = $("#yardCap");
+const tickets = [
+  { id: "SUP-2051", k: "technical", s: "Mobil uygulamada ödeme ekranı açılmıyor" },
+  { id: "SUP-1842", k: "billing", s: "Hesabımdan iki kez ücret çekildi" },
+  { id: "SUP-3307", k: "account", s: "Parola sıfırlama e-postası gelmiyor" },
+  { id: "SUP-4410", k: "other", s: "Ofisinize kargo bırakabilir miyim?" }
+];
+const setBranch = k => {
+  for (const [n, o] of Object.entries(Y)) {
+    const on = n === k;
+    o.ro.classList.toggle("on", on); o.tl.classList.toggle("on", on);
+    if (on) outers.appendChild(o.ro);
+    if (!k || n !== k) o.lp.classList.remove("on");
+  }
+};
+const place = (p, s) => {
+  const L = p.getTotalLength(), a = p.getPointAtLength(s), b = p.getPointAtLength(Math.min(L, s + 2));
+  const ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+  wagon.setAttribute("transform", `translate(${a.x.toFixed(1)} ${a.y.toFixed(1)}) rotate(${ang.toFixed(2)})`);
+};
+let yRun = false, yIdx = 0, yRAF = 0, yTO = 0;
+function yardStep() {
+  if (!yRun) return;
+  const t = tickets[yIdx++ % tickets.length], p = Y[t.k].route;
+  setBranch(null); wagT.textContent = t.id; place(p, 0);
+  cap.innerHTML = `Şekil 00 — Vagon geliyor. state: <q>${t.s}</q>`;
+  yTO = setTimeout(() => {
+    if (!yRun) return;
+    setBranch(t.k); mast.classList.add("on");
+    cap.innerHTML = `Şekil 00 — state: <q>${t.s}</q><br>Makas vagon gelmeden döndü → <strong>answers.department.choice = "${t.k}"</strong>`;
+    const L = p.getTotalLength(), stop = L - 52, t0 = performance.now(), dur = 2700;
+    const tick = now => {
+      if (!yRun) return;
+      const x = Math.min(1, (now - t0) / dur), e = x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
+      place(p, e * stop);
+      if (x < 1) yRAF = requestAnimationFrame(tick);
+      else { Y[t.k].lp.classList.add("on"); mast.classList.remove("on"); yTO = setTimeout(yardStep, 1500); }
+    };
+    yRAF = requestAnimationFrame(tick);
+  }, 900);
+}
+if (reduce) {
+  const p = Y.technical.route; setBranch("technical"); Y.technical.lp.classList.add("on");
+  place(p, p.getTotalLength() - 52);
+  cap.innerHTML = `Şekil 00 — state: <q>Mobil uygulamada ödeme ekranı açılmıyor</q> → <strong>answers.department.choice = "technical"</strong>. Dört ray, dört seçenek; beşinci ray yok.`;
+} else {
+  const hero = $("#s0");
+  onVisible.push(() => {
+    const vis = hero.getBoundingClientRect().bottom > innerHeight * .25;
+    if (vis && !yRun) { yRun = true; yardStep(); }
+    else if (!vis && yRun) { yRun = false; clearTimeout(yTO); cancelAnimationFrame(yRAF); mast.classList.remove("on"); }
+  });
+}
+
+/* ---------- 01 · Anons ↔ Makas ---------- */
+const variants = [
+  { t: "Bu konu büyük ihtimalle teknik ekibe yönlendirilmeli; çünkü sorun yalnızca mobil uygulamada ortaya çıkıyor.",
+    out: '"technical" ⚠', cls: "warn", why: "“teknik” kelimesi yakalandı, technical'a eşlendi. “Büyük ihtimalle” bir sayıya dönüşmedi." },
+  { t: "Ödeme ekranıyla ilgili olduğu için faturalama ekibi de bakabilir; yine de asıl sorun uygulamanın kendisinde gibi duruyor.",
+    out: '"billing" | "technical" ?', cls: "fail", why: "İki aday yakalandı, kurallar çakıştı. Bir insanın karar vermesi gerekiyor." },
+  { t: "Kategori: Teknik Destek\nAçıklama: Sorun mobil istemciye özgü görünüyor; web tarafında aynı kartla ödeme çalışıyor.",
+    out: "null ✕", cls: "fail", why: "Beklenen etiket yok: “Teknik Destek” ≠ technical. Biçim değişti; ayrıştırıcı güncellenmeli." }
+];
+const llmText = $("#llmText"), llmOut = $("#llmOut"), llmWhy = $("#llmWhy"), jevOut = $("#jevOut");
+let duelN = 0, duelToken = 0, nRule = 0, nOk = 0;
+setJson(jevOut, J.duel);
+async function duel() {
+  const my = ++duelToken, v = variants[duelN % variants.length];
+  duelN++;
+  $("#tryNo").textContent = duelN;
+  llmText.textContent = ""; llmOut.textContent = "…"; llmOut.className = ""; llmWhy.textContent = "";
+  jevOut.style.opacity = .25;
+  await sleep(350);
+  if (my !== duelToken) return;
+  jevOut.style.opacity = 1; setJson(jevOut, J.duel); flash(jevOut);
+  $("#nOk").textContent = ++nOk;
+  if (reduce) llmText.textContent = v.t;
+  else for (let i = 0; i < v.t.length; i++) {
+    if (my !== duelToken) return;
+    llmText.textContent += v.t[i];
+    await new Promise(r => setTimeout(r, 17));
+  }
+  await sleep(250);
+  if (my !== duelToken) return;
+  llmOut.textContent = v.out; llmOut.className = v.cls; llmWhy.textContent = v.why;
+  $("#nRule").textContent = ++nRule;
+}
+$("#askAgain").addEventListener("click", duel);
+onSeen.s1 = () => setTimeout(duel, reduce ? 0 : 700);
+
+/* ---------- 02 · Vagon ---------- */
+const manifests = {
+  text: { src: J.stateText, keys: [], note: "Basit olaylarda yeterlidir. Gerçek uygulamalarda JSON nesnesi genellikle daha okunaklı ve sürdürülebilirdir." },
+  json: { src: J.stateJson, keys: ["order_status", "estimated_delivery", "previous_contacts", "customer_tier"], note: "Gerçek hayat: geciken sipariş. JEV <code>order_status</code>, <code>estimated_delivery</code>, <code>previous_contacts</code> ve <code>customer_tier</code> alanlarını birlikte tartar." },
+  list: { src: J.stateList, keys: [], note: "Birden fazla ilişkili metin aynı vagonda, birlikte değerlendirilir." }
+};
+tabs($(".train"), ".car", b => {
+  const m = manifests[b.dataset.k], el = $("#manifest");
+  setJson(el, m.src, m.keys); flash(el); $("#mnote").innerHTML = m.note;
+});
+
+/* ---------- 03 · Makas: açıklamalı soru ---------- */
+const anno = $("#anno"), callouts = $$("#callouts li");
+const lit = c => {
+  $$(".c", anno).forEach(x => x.classList.toggle("lit", x.dataset.c === c));
+  callouts.forEach(x => x.classList.toggle("lit", x.dataset.c === c));
+};
+callouts.forEach(li => {
+  ["mouseenter", "focus"].forEach(ev => li.addEventListener(ev, () => lit(li.dataset.c)));
+  ["mouseleave", "blur"].forEach(ev => li.addEventListener(ev, () => lit(null)));
+});
+$$(".c", anno).forEach(sp => {
+  sp.addEventListener("mouseenter", e => { e.stopPropagation(); lit(sp.dataset.c); });
+  sp.addEventListener("mouseleave", () => lit(null));
+});
+onSeen.s3 = () => {
+  if (reduce) return;
+  ["1", "2", "3", "4", "5"].forEach((c, i) => setTimeout(() => lit(c), 900 + i * 650));
+  setTimeout(() => lit(null), 900 + 5 * 650);
+};
+
+/* ---------- 04 · Kollar ---------- */
+const arc = (a1, a2, r = 120, cx = 150, cy = 150) => {
+  const p = a => [cx + r * Math.cos(a * Math.PI / 180), cy - r * Math.sin(a * Math.PI / 180)];
+  const [x1, y1] = p(a1), [x2, y2] = p(a2);
+  return `M${x1.toFixed(1)} ${y1.toFixed(1)} A${r} ${r} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+};
+const bars = (probs, pick, names) => Object.entries(probs).map(([k, p]) =>
+  `<div class="cb${k === pick ? " pick" : ""}"><span class="cb-k">${names ? names[k] : k}</span><span class="cb-bar"><i style="--w:${p}"></i></span><span class="cb-v">${p.toFixed(2)}</span></div>`).join("");
+const LV = {
+  noul: {
+    name: "needs_human", ask: "· SUP-1842 · çift ücret + hukuki tehdit",
+    q: J.noulQ, s: J.noulS, a: J.noulA,
+    rule: "noul >= 0.90 → İnsan destek ekibine aktar\nnoul <  0.90 → Otomatik akışa devam et",
+    note: "0.98, JEV'in evet yönündeki olasılığıdır; iş kararının kesinlikle doğru olduğu anlamına gelmez.",
+    llm: "<b>Anons kaydı · klasik LLM olsaydı</b><q>Evet, müşterinin mesajı yüksek riskli görünüyor ve insan temsilciye aktarılması uygun olur.</q> İnsan anlar; yazılım ise “Evet”i güvenilir biçimde ayıklamak, farklı cevap biçimlerini yönetmek ve güven derecesini ayrıca istemek zorunda kalır. JEV doğrudan <code>noul: 0.98</code> döndürür.",
+    gauge: () => `<div class="g g-noul" style="--v:0"><div class="g-track"><i class="g-fill"></i><i class="g-thr" style="left:90%"><span>eşik 0.90</span></i><i class="g-pin"><b>0.98</b></i></div><div class="g-scale"><span>0 · hayır</span><span>0.5</span><span>1 · evet</span></div></div>`,
+    run: g => { g.style.setProperty("--v", .98); }
+  },
+  choice: {
+    name: "department", ask: "· SUP-2051 · mobil ödeme ekranı",
+    q: J.choiceQ, s: J.choiceS, a: J.choiceA,
+    rule: 'choice === "technical" → Teknik destek kuyruğu\nseçenek dışı cevap      → mümkün değil: raylar önceden döşendi',
+    note: "JEV yalnızca “ödeme” kelimesini görüp billing seçmez: web'de ödeme çalışırken mobilde çalışmamasını da tartar.",
+    llm: "<b>Anons kaydı · klasik LLM olsaydı</b><q>Bu konu büyük ihtimalle teknik ekibe yönlendirilmeli; çünkü sorun yalnızca mobil uygulamada ortaya çıkıyor.</q> Faydalı bir açıklama — ama kod yine de metinden <code>technical</code> değerini çıkarmak zorunda. JEV'de <code>choice</code> alanı doğrudan okunur.",
+    gauge: () => `<div class="g"><p class="g-head"><b>technical</b>confidence 0.94</p>${bars({ billing: .04, technical: .94, account: .01, other: .01 }, "technical")}</div>`,
+    run: g => g.classList.add("on")
+  },
+  score: {
+    name: "urgency", ask: "· INC-778 · production-api %42 hata",
+    q: J.scoreQ, s: J.scoreS, a: J.scoreA,
+    rule: "score >= 1.5 → Hemen müdahale, on-call çağır\nscore <  1.5 → Gün içi kuyruğa al",
+    note: "1.92 tam sayı değil: JEV seviyelerin olasılıklarını ağırlıklandırır. Kriterler sıralı olmalı — bağımsız etiket değil.",
+    llm: "<b>Anons kaydı · klasik LLM olsaydı</b><q>Bu olay kritik seviyededir. Çok sayıda kullanıcı etkileniyor ve ödeme işlemleri de bozulmuş.</q> İnsan için net; ama iş kuyruğunu otomatik sıralamak için önce “kritik” kelimesini bir puana çevirmek gerekir. JEV doğrudan <code>1.92</code> verir.",
+    gauge: () => `<div class="g"><svg class="dial" viewBox="0 0 300 172" aria-hidden="true">
+        <path class="seg s0" d="${arc(178, 122)}"/><path class="seg s1" d="${arc(118, 62)}"/><path class="seg s2" d="${arc(58, 2)}"/>
+        <text x="40" y="78" text-anchor="middle">Rutin</text><text x="150" y="16" text-anchor="middle">Orta</text><text x="262" y="78" text-anchor="middle">Yüksek</text>
+        <g class="needle"><line x1="150" y1="150" x2="150" y2="44"/><circle cx="150" cy="150" r="7"/></g>
+      </svg><p class="g-head" style="text-align:center"><b>1.92</b>/ 2 · confidence 0.97</p>${bars({ 0: .01, 1: .06, 2: .93 }, "2", { 0: "0 · Rutin", 1: "1 · Orta", 2: "2 · Yüksek" })}</div>`,
+    run: g => { g.classList.add("on"); const n = $(".needle", g); n.style.transform = `rotate(${-90 + 1.92 / 2 * 180}deg)`; }
+  }
+};
+let lvCur = "noul", jCur = "a";
+const lvJson = $("#lvJson");
+const showJson = () => { setJson(lvJson, LV[lvCur][jCur], jCur === "a" ? ["noul", "choice", "score"] : []); };
+function renderLever() {
+  const d = LV[lvCur], g = $("#lvGauge");
+  $("#lvType").textContent = lvCur; $("#lvName").textContent = d.name; $("#lvAsk").textContent = d.ask;
+  g.innerHTML = d.gauge(); $("#lvRule").textContent = d.rule; $("#lvNote").textContent = d.note; $("#lvLlm").innerHTML = d.llm;
+  showJson(); flash(lvJson);
+  const inner = g.firstElementChild;
+  void inner.offsetWidth;
+  requestAnimationFrame(() => requestAnimationFrame(() => d.run(inner)));
+}
+tabs($("#jt"), "button", b => { jCur = b.dataset.j; showJson(); });
+tabs($("#frame"), ".lever", b => { lvCur = b.dataset.t; renderLever(); });
+onSeen.s4 = () => setTimeout(renderLever, reduce ? 0 : 500);
+
+/* ---------- 05 · Tek sefer ---------- */
+setJson($("#multiReq"), J.multiReq, ["department", "urgency", "needs_human"]);
+setJson($("#multiRes"), J.multiRes, ["choice", "score", "noul"]);
+let sending = false;
+async function send() {
+  if (sending) return; sending = true;
+  const req = $("#multiReq"), fan = $("#fan"), rules = $$("#rules span");
+  fan.classList.remove("go"); rules.forEach(r => r.classList.remove("lit"));
+  ["o1", "o2", "o3"].forEach(id => { $("#" + id).textContent = "—"; $("#" + id + "s").innerHTML = "&nbsp;"; });
+  $("#tIn").textContent = "0"; $("#tOut").textContent = "0";
+  req.classList.remove("sending"); void req.offsetWidth; req.classList.add("sending");
+  await sleep(650);
+  fan.classList.add("go");
+  await sleep(500);
+  $("#o1").textContent = "technical"; $("#o1s").textContent = "p(technical) 0.73 · billing 0.22";
+  await sleep(160);
+  count($("#o2"), 1.62, 800, 2); $("#o2s").textContent = "Orta → Yüksek arası · p(2) 0.66";
+  await sleep(160);
+  count($("#o3"), 0.91, 800, 2); $("#o3s").textContent = "evet olasılığı";
+  count($("#tIn"), 310, 900); count($("#tOut"), 35, 900);
+  for (const r of rules) { await sleep(380); r.classList.add("lit"); }
+  sending = false;
+}
+$("#send").addEventListener("click", send);
+onSeen.s5 = () => setTimeout(send, reduce ? 0 : 900);
+
+/* ---------- 06 · Kapı ---------- */
+setJson($("#refund"), J.refund, ["refund_amount", "refund_policy_limit"]);
+let risk = "high";
+const pr = $("#pr");
+function decide() {
+  const p = +pr.value;
+  $("#pv").textContent = p.toFixed(2);
+  let c, t, w, line;
+  if (risk === "high") { c = "r"; t = "İnsan onayı"; w = "Para iadesi yüksek riskli bir işlem: olasılık ne olursa olsun kapıyı insan açar."; line = 0; }
+  else if (p >= .9) { c = "g"; t = "Otomatik devam"; w = "Yüksek olasılık + düşük risk: ajan işlemi yürütebilir."; line = 1; }
+  else if (p >= .6) { c = "a"; t = "İnceleme kuyruğu"; w = "Orta olasılık: işlem bekler, bir göz daha bakar."; line = 2; }
+  else { c = "r"; t = "İnsan onayı"; w = "Düşük olasılık: JEV güvenli bulmuyor, kapı kapalı kalır."; line = 3; }
+  const v = $("#vOut"); v.textContent = t; v.className = "verdict-out " + c;
+  $("#vWhy").textContent = w;
+  ["g", "a", "r"].forEach(x => $("#l" + x).classList.toggle("on", x === c));
+  $$("#gRule span").forEach((s, i) => s.classList.toggle("lit", i === line));
+}
+pr.addEventListener("input", decide);
+tabs($("#risk"), "button", b => { risk = b.dataset.r2; decide(); });
+
+/* ---------- 07 · Hat: sevk oyunu ---------- */
+const tasks = [
+  { t: "Destek talebini billing / technical / account ekibine yönlendir", to: "jev", why: "choice: seçenekler önceden belli, karar sık tekrarlanıyor, kod doğrudan dallanıyor." },
+  { t: "Müşteriye empatik, kişiselleştirilmiş bir cevap yaz", to: "llm", why: "Uzun, doğal, kişisel metin — klasik LLM'in güçlü olduğu alan." },
+  { t: "Üretim olayının aciliyetini düşük / orta / yüksek puanla", to: "jev", why: "score: sıralı seviyeler, iş kuyruğuna doğrudan bağlanır." },
+  { t: "Yeni bir kampanya için açık uçlu fikirler üret", to: "llm", why: "Açık uçlu fikir üretimi JEV'in uygun olmadığı alanlardan." },
+  { t: "Ajan 1299 TL iade etmeden önce: ek onay gerekli mi?", to: "jev", why: "noul: güvenlik kapısına olasılık sinyali. Son söz iş kuralında." },
+  { t: "Çöken ödeme ekranı için düzeltme kodu yaz", to: "llm", why: "Kod üretimi klasik LLM işidir; JEV kod yazmaz." },
+  { t: "Yorumu allow / review / block olarak ayır", to: "jev", why: "choice: moderasyon rotası; kaçış rayı olarak review hazır." },
+  { t: "Üç sayfalık olay raporunu yöneticiye özetle", to: "llm", why: "Özet ve açıklama: metin üretimi." }
+];
+let ti = 0, ok = 0, answered = false;
+const dqBtns = $("#dqBtns"), fb = $("#dqFb");
+function showTask() {
+  answered = false;
+  if (ti >= tasks.length) {
+    $("#dqNo").textContent = "Sefer tamam";
+    $("#dqTask").textContent = ok === tasks.length ? "8 / 8 — kule sizin." : `${ok} / 8 — raylar hâlâ sizi bekliyor.`;
+    fb.innerHTML = "Gerçek sistemde ikisi aynı hatta çalışır: JEV yönlendirir, iş kuralı karar verir, klasik LLM cevabı yazar.";
+    dqBtns.innerHTML = `<button class="btn" type="button" data-act="again">↻ Yeni sefer</button>`;
+    return;
+  }
+  $("#dqNo").textContent = `Vagon ${ti + 1} / ${tasks.length} · hangi hatta?`;
+  $("#dqTask").textContent = tasks[ti].t;
+  fb.textContent = "";
+  dqBtns.innerHTML = `<button class="btn ghost" type="button" data-to="jev">◂ JEV hattı</button><button class="btn ghost" type="button" data-to="llm">LLM hattı ▸</button>`;
+}
+dqBtns.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.act === "again") { ti = 0; ok = 0; $("#dqOk").textContent = 0; $("#dqAll").textContent = 0; showTask(); return; }
+  if (b.dataset.act === "next") { ti++; showTask(); dqBtns.querySelector("button")?.focus(); return; }
+  if (answered) return;
+  answered = true;
+  const task = tasks[ti], right = b.dataset.to === task.to;
+  if (right) ok++;
+  $("#dqOk").textContent = ok; $("#dqAll").textContent = ti + 1;
+  fb.innerHTML = `<span class="${right ? "ok" : "fail"}">${right ? "✓ Doğru hat." : "✕ Yanlış hat."}</span> ${task.to === "jev" ? "JEV" : "Klasik LLM"} — ${task.why}`;
+  dqBtns.innerHTML = `<button class="btn" type="button" data-act="next">${ti + 1 < tasks.length ? "Sıradaki vagon →" : "Seferi kapat →"}</button>`;
+  dqBtns.querySelector("button").focus();
+});
+showTask();
+check();
+})();
+</script>
+</body>
+</html>
